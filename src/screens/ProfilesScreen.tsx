@@ -77,7 +77,7 @@ export default function ProfilesScreen() {
 
     // S'assure que la ligne teachers existe avant toute sauvegarde de profil
     if (state.teacher?.id && state.teacher.id !== 'demo') {
-      await supabase.from('teachers').upsert(
+      await supabase.from('au_teachers').upsert(
         { id: state.teacher.id, email: state.teacher.email },
         { onConflict: 'id' }
       )

@@ -35,7 +35,7 @@ function Router() {
 
     try {
       const { data, error } = await supabase
-        .from('teachers')
+        .from('au_teachers')
         .upsert({ id: authId, email }, { onConflict: 'id' })
         .select()
         .single()
