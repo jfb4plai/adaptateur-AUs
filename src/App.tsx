@@ -29,28 +29,32 @@ function Router() {
   }, [])
 
   async function syncTeacher(email: string) {
+    // Récupère l'UID Auth réel — toujours disponible si l'user est connecté
+    const { data: { user } } = await supabase.auth.getUser()
+    const authId = user?.id ?? crypto.randomUUID()
+
     try {
       const { data, error } = await supabase
         .from('teachers')
-        .upsert({ email }, { onConflict: 'email' })
+        .upsert({ id: authId, email }, { onConflict: 'email' })
         .select()
         .single()
 
       if (data) {
         dispatch({ type: 'SET_TEACHER', teacher: data })
       } else {
-        // Table absente ou RLS bloquant → profil minimal pour ne pas bloquer l'accès
+        // Table absente ou RLS bloquant → profil avec vrai UUID pour ne pas bloquer
         console.warn('teachers table error:', error?.message)
         dispatch({
           type: 'SET_TEACHER',
-          teacher: { id: 'pending', email, display_name: null, school_name: null, language: 'fr', created_at: new Date().toISOString() },
+          teacher: { id: authId, email, display_name: null, school_name: null, language: 'fr', created_at: new Date().toISOString() },
         })
       }
     } catch (e) {
       console.error('syncTeacher failed:', e)
       dispatch({
         type: 'SET_TEACHER',
-        teacher: { id: 'pending', email, display_name: null, school_name: null, language: 'fr', created_at: new Date().toISOString() },
+        teacher: { id: authId, email, display_name: null, school_name: null, language: 'fr', created_at: new Date().toISOString() },
       })
     }
     dispatch({ type: 'SET_SCREEN', screen: 'profiles' })
