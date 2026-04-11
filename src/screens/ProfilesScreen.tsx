@@ -184,6 +184,10 @@ export default function ProfilesScreen() {
       {/* Sidebar gauche — liste des profils */}
       <aside className="w-72 bg-white border-r border-slate-200 flex flex-col">
         <div className="p-4 border-b border-slate-100">
+          <div className="flex items-center gap-2 mb-3">
+            <img src="/plai-logo.svg" alt="PLAI" className="w-6 h-6" />
+            <span className="text-xs font-semibold text-purple-700 tracking-wide">PLAI</span>
+          </div>
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-semibold text-slate-800">Mes profils AU</h2>
             <button
