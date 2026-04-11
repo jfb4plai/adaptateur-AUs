@@ -2,27 +2,36 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../store/AppContext'
 
+type Mode = 'login' | 'register'
+
 export default function LoginScreen() {
   const { dispatch } = useApp()
+  const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const { error: err } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin },
-    })
+
+    if (mode === 'login') {
+      const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+      if (err) { setError('Email ou mot de passe incorrect.'); setLoading(false); return }
+    } else {
+      const { error: err } = await supabase.auth.signUp({ email, password })
+      if (err) { setError(err.message); setLoading(false); return }
+      // Connexion directe après inscription
+      const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password })
+      if (loginErr) { setError('Compte créé — connectez-vous maintenant.'); setLoading(false); return }
+    }
     setLoading(false)
-    if (err) { setError(err.message); return }
-    setSent(true)
+    // L'auth listener dans App.tsx prend le relais
   }
 
-  // Mode démo sans Supabase configuré
+  // Mode démo
   function handleDemoMode() {
     dispatch({
       type: 'SET_TEACHER',
@@ -41,6 +50,7 @@ export default function LoginScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-md">
+
         {/* Logo / titre */}
         <div className="text-center mb-8">
           <img src="/plai-logo.jpg" alt="PLAI" className="w-48 mx-auto mb-3" />
@@ -48,53 +58,80 @@ export default function LoginScreen() {
           <p className="text-slate-500 mt-1 text-sm">
             Adaptation de documents selon les Aménagements Universels — FWB
           </p>
-          <p className="text-xs text-purple-600 mt-1 font-medium">PLAI — Pôle Liégeois d'Accompagnement vers une École Inclusive</p>
+          <p className="text-xs text-purple-600 mt-1 font-medium">
+            PLAI — Pôle Liégeois d'Accompagnement vers une École Inclusive
+          </p>
         </div>
 
-        {sent ? (
-          <div className="text-center">
-            <div className="text-4xl mb-4">📬</div>
-            <p className="text-slate-700 font-medium">Vérifiez votre email</p>
-            <p className="text-slate-500 text-sm mt-2">
-              Un lien de connexion a été envoyé à <strong>{email}</strong>
-            </p>
-          </div>
-        ) : (
-          <>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Adresse email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  placeholder="prenom.nom@monecole.be"
-                  className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              {error && <p className="text-red-500 text-sm">{error}</p>}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition disabled:opacity-50"
-              >
-                {loading ? 'Envoi…' : 'Recevoir le lien de connexion'}
-              </button>
-            </form>
+        {/* Onglets login / inscription */}
+        <div className="flex rounded-lg border border-slate-200 mb-6 overflow-hidden">
+          <button
+            onClick={() => { setMode('login'); setError('') }}
+            className={`flex-1 py-2 text-sm font-medium transition ${
+              mode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Connexion
+          </button>
+          <button
+            onClick={() => { setMode('register'); setError('') }}
+            className={`flex-1 py-2 text-sm font-medium transition ${
+              mode === 'register' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Créer un compte
+          </button>
+        </div>
 
-            <div className="mt-4 pt-4 border-t border-slate-100 text-center">
-              <button
-                onClick={handleDemoMode}
-                className="text-sm text-slate-500 hover:text-slate-700 underline"
-              >
-                Essayer sans compte (mode démo)
-              </button>
-            </div>
-          </>
-        )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Adresse email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+              placeholder="prenom.nom@monecole.be"
+              className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Mot de passe
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              minLength={6}
+              placeholder="6 caractères minimum"
+              className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {error && <p className="text-red-500 text-sm">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition disabled:opacity-50"
+          >
+            {loading ? '…' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'}
+          </button>
+        </form>
+
+        <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+          <button
+            onClick={handleDemoMode}
+            className="text-sm text-slate-500 hover:text-slate-700 underline"
+          >
+            Essayer sans compte (mode démo)
+          </button>
+        </div>
+
       </div>
     </div>
   )
