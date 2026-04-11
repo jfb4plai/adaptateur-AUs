@@ -234,12 +234,22 @@ export default function ProfilesScreen() {
           ))}
         </div>
 
-        <div className="p-3 border-t border-slate-100">
+        <div className="p-3 border-t border-slate-100 space-y-2">
           <button
             onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'convert' })}
             className="w-full bg-emerald-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-emerald-700 transition"
           >
             → Convertir un document
+          </button>
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut()
+              dispatch({ type: 'SET_TEACHER', teacher: null })
+              dispatch({ type: 'SET_SCREEN', screen: 'login' })
+            }}
+            className="w-full text-slate-400 hover:text-slate-600 text-xs py-1 transition"
+          >
+            Se déconnecter ({state.teacher?.email})
           </button>
         </div>
       </aside>
