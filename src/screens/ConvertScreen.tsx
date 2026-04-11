@@ -57,6 +57,13 @@ export default function ConvertScreen() {
 
   async function startConversion() {
     if (!file || !selectedProfile) return
+
+    // PDF/image : pas encore supportés en conversion — DOCX uniquement
+    if (file.type !== 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      setError('Seuls les fichiers DOCX sont supportés pour la conversion. Le support PDF et image est en développement.')
+      return
+    }
+
     setRunning(true)
     setError('')
     dispatch({ type: 'RESET_CONVERSION' })
