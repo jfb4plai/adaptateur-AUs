@@ -43,7 +43,7 @@ export default function LoginScreen() {
       <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-md">
         {/* Logo / titre */}
         <div className="text-center mb-8">
-          <img src="/plai-logo.svg" alt="PLAI" className="w-12 h-12 mx-auto mb-3" />
+          <img src="/plai-logo.jpg" alt="PLAI" className="w-48 mx-auto mb-3" />
           <h1 className="text-2xl font-bold text-slate-800">Adaptateur AUs</h1>
           <p className="text-slate-500 mt-1 text-sm">
             Adaptation de documents selon les Aménagements Universels — FWB
