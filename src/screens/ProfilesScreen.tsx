@@ -75,6 +75,14 @@ export default function ProfilesScreen() {
     setSaving(true)
     setMsg('')
 
+    // S'assure que la ligne teachers existe avant toute sauvegarde de profil
+    if (state.teacher?.id && state.teacher.id !== 'demo') {
+      await supabase.from('teachers').upsert(
+        { id: state.teacher.id, email: state.teacher.email },
+        { onConflict: 'id' }
+      )
+    }
+
     if (state.teacher?.id === 'demo') {
       // Mode démo : sauvegarde locale
       const isNew = !profiles.find(p => p.id === editing.id)
@@ -242,12 +250,16 @@ export default function ProfilesScreen() {
           <div className="max-w-3xl mx-auto">
             {/* En-tête */}
             <div className="flex items-center gap-4 mb-6 flex-wrap">
-              <input
-                type="text"
-                value={editing.name}
-                onChange={e => setEditing({ ...editing, name: e.target.value })}
-                className="text-xl font-semibold text-slate-800 border-b-2 border-blue-300 bg-transparent focus:outline-none flex-1 min-w-0"
-              />
+              <div className="flex-1 min-w-0">
+                <label className="block text-xs font-medium text-slate-500 mb-1">Nom du profil</label>
+                <input
+                  type="text"
+                  value={editing.name}
+                  onChange={e => setEditing({ ...editing, name: e.target.value })}
+                  placeholder="Ex : Classe 3B, Évaluation Maths…"
+                  className="w-full text-lg font-semibold text-slate-800 border border-slate-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
               <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer whitespace-nowrap">
                 <input
                   type="checkbox"
