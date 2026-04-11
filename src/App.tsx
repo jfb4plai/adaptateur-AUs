@@ -10,7 +10,7 @@ import './index.css'
 function Router() {
   const { state, dispatch } = useApp()
 
-  // Écouter la session Supabase (magic link)
+  // Écouter la session Supabase
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) syncTeacher(session.user.email ?? '')
@@ -29,16 +29,31 @@ function Router() {
   }, [])
 
   async function syncTeacher(email: string) {
-    const { data } = await supabase
-      .from('teachers')
-      .upsert({ email }, { onConflict: 'email' })
-      .select()
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('teachers')
+        .upsert({ email }, { onConflict: 'email' })
+        .select()
+        .single()
 
-    if (data) {
-      dispatch({ type: 'SET_TEACHER', teacher: data })
-      dispatch({ type: 'SET_SCREEN', screen: 'profiles' })
+      if (data) {
+        dispatch({ type: 'SET_TEACHER', teacher: data })
+      } else {
+        // Table absente ou RLS bloquant → profil minimal pour ne pas bloquer l'accès
+        console.warn('teachers table error:', error?.message)
+        dispatch({
+          type: 'SET_TEACHER',
+          teacher: { id: 'pending', email, display_name: null, school_name: null, language: 'fr', created_at: new Date().toISOString() },
+        })
+      }
+    } catch (e) {
+      console.error('syncTeacher failed:', e)
+      dispatch({
+        type: 'SET_TEACHER',
+        teacher: { id: 'pending', email, display_name: null, school_name: null, language: 'fr', created_at: new Date().toISOString() },
+      })
     }
+    dispatch({ type: 'SET_SCREEN', screen: 'profiles' })
   }
 
   switch (state.screen) {
