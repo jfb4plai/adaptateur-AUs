@@ -13,7 +13,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const result = await handleRewrite(req.body)
-    const parsed = JSON.parse(result)
+    // Supprime les caractères de contrôle bruts (tabs, CR, etc.) qui brisent JSON.parse
+    const sanitized = result.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ')
+    const parsed = JSON.parse(sanitized)
     return res.json(parsed)
   } catch (e: any) {
     console.error('Rewrite error:', e)
