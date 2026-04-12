@@ -5,7 +5,7 @@
  */
 
 import express from 'express'
-import { handleRewrite } from './rewrite.js'
+import { handleRewrite } from './_rewrite.js'
 
 const app = express()
 app.use(express.json({ limit: '5mb' }))
