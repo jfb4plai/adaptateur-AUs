@@ -1,6 +1,6 @@
 {
   "functions": {
     "api/rewrite.ts": { "maxDuration": 60 },
-    "api/pdf-vision.ts": { "maxDuration": 60 }
+    "api/pdf-vision.ts": { "maxDuration": 120 }
   }
 }
