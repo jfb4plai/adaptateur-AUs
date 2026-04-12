@@ -19,8 +19,15 @@ interface RewriteRequest {
   language: string
 }
 
+// Max blocs envoyés à Claude (limite Haiku 4096 tokens ≈ 12 blocs)
+const MAX_BLOCKS = 12
+
 export async function handleRewrite(body: RewriteRequest): Promise<string> {
   const { blocks, activeAUs, textAdaptation, language } = body
+
+  // Limite les blocs pour ne pas dépasser la fenêtre de sortie Haiku
+  const truncated = blocks.length > MAX_BLOCKS
+  const blocksToProcess = truncated ? blocks.slice(0, MAX_BLOCKS) : blocks
 
   const systemPrompt = buildSystemPrompt(activeAUs, textAdaptation, language)
 
@@ -31,13 +38,23 @@ export async function handleRewrite(body: RewriteRequest): Promise<string> {
     messages: [
       {
         role: 'user',
-        content: JSON.stringify({ blocks }),
+        content: JSON.stringify({ blocks: blocksToProcess }),
       },
     ],
   })
 
   const content = message.content[0]
   if (content.type !== 'text') throw new Error('Unexpected Claude response type')
+
+  // Si document tronqué, injecter l'avertissement dans la réponse JSON
+  if (truncated) {
+    const parsed = JSON.parse(content.text)
+    parsed._truncated = true
+    parsed._truncated_at = MAX_BLOCKS
+    parsed._total_blocks = blocks.length
+    return JSON.stringify(parsed)
+  }
+
   return content.text
 }
 
