@@ -10,8 +10,8 @@ import type { TextAdaptation } from '../src/types'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// Modèle : Sonnet pour la précision sur les structures complexes et l'écriture cursive
-const MODEL = 'claude-3-5-sonnet-20241022'
+// Modèle : Opus 3 pour la précision sur les structures complexes et l'écriture cursive
+const MODEL = 'claude-3-opus-20240229'
 
 interface PdfVisionRequest {
   pageBase64: string
