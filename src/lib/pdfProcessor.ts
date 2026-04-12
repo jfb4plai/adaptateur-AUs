@@ -35,7 +35,8 @@ export async function pdfToImages(file: File, scale = 1.5): Promise<PdfPage[]> {
     canvas.height = viewport.height
     const ctx = canvas.getContext('2d')!
 
-    await page.render({ canvasContext: ctx, viewport }).promise
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await page.render({ canvasContext: ctx, viewport } as any).promise
 
     // Extraire le PNG en base64 (sans le préfixe)
     const dataUrl = canvas.toDataURL('image/png')
