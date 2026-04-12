@@ -1,9 +1,6 @@
 {
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" }
-  ],
   "functions": {
-    "api/index.ts": { "maxDuration": 60 },
+    "api/rewrite.ts": { "maxDuration": 60 },
     "api/pdf-vision.ts": { "maxDuration": 60 }
   }
 }
