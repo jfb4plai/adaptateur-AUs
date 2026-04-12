@@ -93,6 +93,12 @@ ${textAdaptation === 'HP' ? '- Maintien complexité. Vocabulaire précis.' : ''}
 
 PICTOGRAMMES : pour chaque bloc, "picto_words" = mots à pictogrammer (lemmatisés, sans article).
 
+RÈGLES JSON CRITIQUES :
+- Dans les valeurs textuelles, remplace tout guillemet " par une apostrophe '
+- N'utilise jamais de guillemets doubles dans les valeurs des champs
+- Les seuls guillemets doubles autorisés sont les délimiteurs de clés et valeurs JSON
+- Remplace les tirets longs (—) par des tirets courts (-)
+
 RETOURNE UNIQUEMENT ce JSON :
 {
   "blocks": [

@@ -97,6 +97,11 @@ ${textAdaptation === 'FLE' ? '- Vocabulaire B1 max. Glose les termes techniques 
 ${textAdaptation === 'FALC' ? '- Phrases ≤ 12 mots. 1 idée par phrase. Mots courants uniquement. Pas de métaphores.' : ''}
 ${textAdaptation === 'HP' ? '- Maintien de la complexité. Ajout de nuances et de vocabulaire précis.' : ''}` : ''}
 
+RÈGLES JSON CRITIQUES :
+- Dans les valeurs textuelles, remplace tout guillemet " par une apostrophe '
+- Les seuls guillemets doubles autorisés sont les délimiteurs JSON
+- Remplace les tirets longs (—) par des tirets courts (-)
+
 PICTOGRAMMES — pour chaque bloc retourne "picto_words" : tableau des mots à pictogrammer
 (noms communs et/ou verbes selon options de densité). Formes lemmatisées, sans article.
 
