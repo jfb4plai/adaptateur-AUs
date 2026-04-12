@@ -60,3 +60,51 @@ export async function rewriteWithClaude(
 
   return response.json()
 }
+
+/**
+ * Analyse un PDF page par page via Claude Vision.
+ * Chaque page (image PNG base64) est envoyée à /api/pdf-vision.
+ * Retourne les blocs fusionnés de toutes les pages.
+ */
+export async function rewritePdfWithVision(
+  pages: { pageNumber: number; base64: string }[],
+  activeAUs: string[],
+  textAdaptation: TextAdaptation,
+  language: string
+): Promise<RewriteResult> {
+  const allBlocks: RewrittenBlock[] = []
+  let reorderInstructions = false
+  const complexityOrder: string[] = []
+
+  for (const page of pages) {
+    const response = await fetch('/api/pdf-vision', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pageBase64: page.base64,
+        pageNumber: page.pageNumber,
+        activeAUs,
+        textAdaptation,
+        language,
+      }),
+    })
+
+    if (!response.ok) {
+      const err = await response.text()
+      throw new Error(`Claude Vision error (page ${page.pageNumber}): ${err}`)
+    }
+
+    const result: RewriteResult = await response.json()
+    allBlocks.push(...result.blocks)
+    if (result.structure_hints.reorder_instructions_first) reorderInstructions = true
+    complexityOrder.push(...result.structure_hints.complexity_order)
+  }
+
+  return {
+    blocks: allBlocks,
+    structure_hints: {
+      reorder_instructions_first: reorderInstructions,
+      complexity_order: complexityOrder,
+    },
+  }
+}

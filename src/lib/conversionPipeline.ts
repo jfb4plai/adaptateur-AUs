@@ -5,7 +5,8 @@
 
 import type { AUProfile, ConversionReport, ConversionStep } from '../types'
 import { parseDocx, buildPreviewHtml } from './docxProcessor'
-import { rewriteWithClaude } from './claudeRewriter'
+import { rewriteWithClaude, rewritePdfWithVision } from './claudeRewriter'
+import { pdfToImages } from './pdfProcessor'
 import { fetchPictosBatch } from './arasaac'
 import { buildDocx } from './docxBuilder'
 
@@ -22,44 +23,53 @@ export async function runConversionPipeline(
   profile: AUProfile,
   onStep: StepUpdater
 ): Promise<ConversionOutput> {
+  const isPdf = file.type === 'application/pdf'
+
   // ── Étape 1 : Parse ──────────────────────────────────────────────────────
   onStep('parse', 'running')
-  const parsed = await parseDocx(file)
+  const parsed = isPdf ? null : await parseDocx(file)
+  const pdfPages = isPdf ? await pdfToImages(file) : null
   onStep('parse', 'done')
 
-  // ── Étape 2 : Direct AUs (xml_direct — côté HTML/preview) ────────────────
+  // ── Étape 2 : Direct AUs ─────────────────────────────────────────────────
   onStep('direct', 'running')
-  // Les AUs xml_direct sont appliquées directement dans le HTML de preview
-  // et dans le DOCX builder — pas d'appel API nécessaire
+  // Pour PDF : appliquées après reconstruction — marquage uniquement
   onStep('direct', 'done')
 
-  // ── Étape 3 : Claude Rewrite ─────────────────────────────────────────────
+  // ── Étape 3 : Claude (DOCX) ou Vision (PDF) ───────────────────────────────
   const needsClaude = profile.au_selections.some(id =>
     ['AU11','AU12','AU13','AU14','AU15','AU18','AU19','AU20','AU21','AU22','AU23','AU24','AU26'].includes(id)
   )
 
   let rewriteResult: Awaited<ReturnType<typeof rewriteWithClaude>> | null = null
 
-  if (needsClaude) {
-    onStep('claude', 'running')
-    try {
+  onStep('claude', 'running')
+  try {
+    if (isPdf && pdfPages) {
+      // PDF → Vision : 1 appel par page, Claude voit l'image complète
+      rewriteResult = await rewritePdfWithVision(
+        pdfPages,
+        profile.au_selections,
+        profile.text_adaptation,
+        profile.language
+      )
+    } else if (!isPdf && parsed && needsClaude) {
       rewriteResult = await rewriteWithClaude(
         parsed.blocks,
         profile.au_selections,
         profile.text_adaptation,
         profile.language
       )
-      onStep('claude', 'done')
-    } catch (e) {
-      onStep('claude', 'error')
-      throw e
     }
-  } else {
     onStep('claude', 'done')
+  } catch (e) {
+    onStep('claude', 'error')
+    throw e
   }
 
   // Utiliser les blocs réécrits ou les blocs originaux
-  const finalBlocks = rewriteResult?.blocks ?? parsed.blocks.map(b => ({
+  const sourceBlocks = parsed?.blocks ?? []
+  const finalBlocks = rewriteResult?.blocks ?? sourceBlocks.map(b => ({
     id: b.id,
     type: b.type,
     original: b.text,
