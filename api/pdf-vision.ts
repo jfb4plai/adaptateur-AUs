@@ -13,8 +13,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const result = await handlePdfVision(req.body)
+
+    // Extraire le JSON entre le premier { et le dernier }
+    // (Claude peut ajouter du texte avant/après le JSON)
+    const jsonStart = result.indexOf('{')
+    const jsonEnd = result.lastIndexOf('}')
+    if (jsonStart === -1 || jsonEnd === -1) {
+      throw new Error('No JSON object found in Claude response')
+    }
+    const extracted = result.slice(jsonStart, jsonEnd + 1)
+
     // Sanitise les caractères de contrôle dans les valeurs JSON
-    const sanitized = result.replace(
+    const sanitized = extracted.replace(
       /"(?:[^"\\]|\\.)*"/g,
       (match) => match.replace(/[\x00-\x1F\x7F]/g, (c) => {
         if (c === '\n') return '\\n'

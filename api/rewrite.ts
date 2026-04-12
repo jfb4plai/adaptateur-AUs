@@ -13,8 +13,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const result = await handleRewrite(req.body)
-    // Remplace les caractères de contrôle DANS les valeurs string JSON (pas la structure)
-    const sanitized = result.replace(
+    const jsonStart = result.indexOf('{')
+    const jsonEnd = result.lastIndexOf('}')
+    if (jsonStart === -1 || jsonEnd === -1) throw new Error('No JSON in Claude response')
+    const extracted = result.slice(jsonStart, jsonEnd + 1)
+    const sanitized = extracted.replace(
       /"(?:[^"\\]|\\.)*"/g,
       (match) => match.replace(/[\x00-\x1F\x7F]/g, (c) => {
         if (c === '\n') return '\\n'
@@ -24,6 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     )
     const parsed = JSON.parse(sanitized)
+    // (extracted + sanitized)
     return res.json(parsed)
   } catch (e: any) {
     console.error('Rewrite error:', e)
