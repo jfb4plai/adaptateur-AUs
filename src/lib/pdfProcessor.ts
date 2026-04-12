@@ -19,9 +19,10 @@ export interface PdfPage {
 
 /**
  * Convertit un fichier PDF en tableau d'images PNG base64
- * Résolution adaptée : 1.5× (bon équilibre qualité/taille)
+ * Résolution : 3.0× (~216 DPI) — nécessaire pour lire la police cursive scolaire
+ * À 1.5× les lettres cursives se confondent (b/ll, c/on, vi/r...)
  */
-export async function pdfToImages(file: File, scale = 1.5): Promise<PdfPage[]> {
+export async function pdfToImages(file: File, scale = 3.0): Promise<PdfPage[]> {
   const arrayBuffer = await file.arrayBuffer()
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
   const pages: PdfPage[] = []

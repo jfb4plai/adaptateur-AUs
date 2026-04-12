@@ -119,6 +119,9 @@ export interface ConversionReport {
   picto_words_not_found: string[]
   blocks_rewritten: number
   warnings: string[]
+  // Corrections effectuées par la passe 2 Vision (PDF uniquement)
+  pass2_corrections?: string[]
+  uncertain_chars?: string[]
 }
 
 export interface Conversion {

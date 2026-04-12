@@ -39,6 +39,9 @@ export interface RewriteResult {
     reorder_instructions_first: boolean
     complexity_order: string[]
   }
+  // Passe 2 Vision : corrections et incertitudes (PDF uniquement)
+  pass2_corrections?: string[]
+  uncertain_chars?: string[]
 }
 
 export async function rewriteWithClaude(
@@ -76,6 +79,9 @@ export async function rewritePdfWithVision(
   let reorderInstructions = false
   const complexityOrder: string[] = []
 
+  const allCorrections: string[] = []
+  const allUncertain: string[] = []
+
   for (const page of pages) {
     const response = await fetch('/api/pdf-vision', {
       method: 'POST',
@@ -98,6 +104,8 @@ export async function rewritePdfWithVision(
     allBlocks.push(...result.blocks)
     if (result.structure_hints.reorder_instructions_first) reorderInstructions = true
     complexityOrder.push(...result.structure_hints.complexity_order)
+    if (result.pass2_corrections) allCorrections.push(...result.pass2_corrections)
+    if (result.uncertain_chars) allUncertain.push(...result.uncertain_chars)
   }
 
   return {
@@ -106,5 +114,7 @@ export async function rewritePdfWithVision(
       reorder_instructions_first: reorderInstructions,
       complexity_order: complexityOrder,
     },
+    pass2_corrections: allCorrections,
+    uncertain_chars: allUncertain,
   }
 }

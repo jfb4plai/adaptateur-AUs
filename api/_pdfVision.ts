@@ -1,8 +1,8 @@
 /**
  * Claude Vision handler — analyse une page PDF (image PNG base64)
  * Pipeline 2 passes :
- *   Passe 1 — Extraction Sonnet Vision : lecture structurée de la page
- *   Passe 2 — Vérification Sonnet Text  : cohérence phonétique, structure, lacunes
+ *   Passe 1 — Transcription lettre par lettre (lecture stricte, aucune invention)
+ *   Passe 2 — Audit caractère par caractère avec liste de corrections visibles
  */
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -10,7 +10,7 @@ import type { TextAdaptation } from '../src/types'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-// Modèle : Sonnet 4 — Vision + précision sur structures complexes et écriture cursive
+// Sonnet 4 — meilleure Vision disponible, nécessaire pour police cursive scolaire
 const MODEL = 'claude-sonnet-4-20250514'
 
 interface PdfVisionRequest {
@@ -24,7 +24,7 @@ interface PdfVisionRequest {
 export async function handlePdfVision(body: PdfVisionRequest): Promise<string> {
   const { pageBase64, pageNumber, activeAUs, textAdaptation, language } = body
 
-  // ── PASSE 1 : Extraction Vision ──────────────────────────────────────────
+  // ── PASSE 1 : Transcription stricte ──────────────────────────────────────
   const extractionResult = await client.messages.create({
     model: MODEL,
     max_tokens: 4096,
@@ -39,7 +39,9 @@ export async function handlePdfVision(body: PdfVisionRequest): Promise<string> {
           },
           {
             type: 'text',
-            text: `Extrais et structure le contenu de cette page ${pageNumber}. Retourne le JSON demandé.`,
+            text: `PASSE 1 — Transcription stricte de la page ${pageNumber}.
+Lis chaque caractère visible INDIVIDUELLEMENT. Retourne le JSON demandé.
+RAPPEL : le champ "original" = copie EXACTE de ce qui est imprimé, lettre par lettre, sans rien ajouter ni modifier.`,
           },
         ],
       },
@@ -49,7 +51,7 @@ export async function handlePdfVision(body: PdfVisionRequest): Promise<string> {
   const pass1Text = extractionResult.content[0]
   if (pass1Text.type !== 'text') throw new Error('Unexpected response type (pass 1)')
 
-  // ── PASSE 2 : Vérification cohérence ─────────────────────────────────────
+  // ── PASSE 2 : Audit caractère par caractère ───────────────────────────────
   const verificationResult = await client.messages.create({
     model: MODEL,
     max_tokens: 4096,
@@ -64,11 +66,14 @@ export async function handlePdfVision(body: PdfVisionRequest): Promise<string> {
           },
           {
             type: 'text',
-            text: `Voici l'extraction JSON de la passe 1 pour cette page :
+            text: `PASSE 2 — Audit caractère par caractère.
 
+JSON de la passe 1 :
 ${pass1Text.text}
 
-Vérifie et corrige ce JSON en comparant avec l'image. Retourne le JSON corrigé final.`,
+Pour chaque bloc, relis le champ "original" lettre par lettre en comparant avec l'image.
+Liste toutes les corrections dans "pass2_corrections" et tous les caractères encore incertains dans "uncertain_chars".
+Retourne le JSON corrigé complet.`,
           },
         ],
       },
@@ -80,69 +85,93 @@ Vérifie et corrige ce JSON en comparant avec l'image. Retourne le JSON corrigé
   return pass2Text.text
 }
 
-// ── PROMPT PASSE 1 : Extraction ──────────────────────────────────────────────
+// ── PROMPT PASSE 1 : Transcription stricte ───────────────────────────────────
 function buildExtractionPrompt(
   activeAUs: string[],
   textAdaptation: TextAdaptation,
   language: string,
   pageNumber: number
 ): string {
-  return `Tu es un assistant spécialisé en adaptation pédagogique pour la Fédération Wallonie-Bruxelles (FWB).
-Tu analyses des images de pages de documents pédagogiques scannés.
+  return `Tu es un transcripteur expert de documents pédagogiques scannés pour la Fédération Wallonie-Bruxelles (FWB).
+Ta PREMIÈRE mission est de transcrire EXACTEMENT ce qui est imprimé — avant toute adaptation.
 
 LANGUE DU DOCUMENT : ${language}
 PROFIL D'ADAPTATION : ${textAdaptation}
 AMÉNAGEMENTS UNIVERSELS ACTIFS : ${activeAUs.join(', ')}
 
-── RÈGLES D'EXTRACTION VISUELLE ───────────────────────────────────────────────
+════════════════════════════════════════════════════════════
+  RÈGLE ABSOLUE N°1 — TRANSCRIPTION EXACTE
+════════════════════════════════════════════════════════════
 
-LECTURE DU TEXTE :
-- Lis chaque mot séparément et soigneusement — ne confonds pas les graphies proches
-- Sons du français à distinguer impérativement (ne pas confondre) :
-    eu (jeu, bleu) ≠ eur (heure, beurre) ≠ oeu/œu (œuf, cœur) ≠ ou (loup, roue)
-    ill (fille, bille) ≠ il (fil) ≠ y (yeux)
-    an/en ≠ on ≠ in/ain ≠ un
-- Si un mot est ambigu, préfère la forme la plus courante en français
+Le champ "original" doit être la COPIE CONFORME lettre par lettre de ce qui est imprimé.
+→ N'AJOUTE JAMAIS un mot, une lettre, une syllabe absente de l'image.
+→ N'INTERPRÈTE JAMAIS ce qui "devrait" être là — transcris ce que tu VOIS.
+→ Si un caractère est illisible ou ambigu → écris [?] à sa place.
+→ JAMAIS de complétion des lacunes (____) — laisse exactement "____".
 
-STRUCTURE ET MISE EN PAGE :
-- Identifie et conserve la structure spatiale :
-    • Listes en colonnes → représente-les avec une colonne par ligne, séparées par " | "
-      Exemple : colonne eu | colonne eur | colonne oeu | colonne oeur
-    • Tableaux → conserve les lignes et colonnes avec séparateur " | "
-    • Exercices en colonnes → chaque item sur sa propre ligne
-- Chaque bloc identifié a un type : title | instruction | body | exercise
+════════════════════════════════════════════════════════════
+  RÈGLE ABSOLUE N°2 — POLICE CURSIVE SCOLAIRE BELGE
+════════════════════════════════════════════════════════════
 
-LACUNES ET EXERCICES À COMPLÉTER :
-- Les cases vides / tirets / pointillés dans les exercices → représente-les par "____"
-- Les mots avec lettres manquantes (ex: s_l_il) → conserve exactement les lettres présentes et les "_" pour les manquantes
-- Ne complète JAMAIS les lacunes toi-même — laisse "____"
+Ce document utilise la POLICE CURSIVE SCOLAIRE belge (écriture attachée imprimée).
+Les confusions suivantes sont FRÉQUENTES — vérifie CHAQUE lettre :
 
-IMAGES ET SCHÉMAS :
-- Décris brièvement : [IMAGE: description courte en 5 mots max]
+CONFUSIONS CRITIQUES (erreurs connues à éviter) :
+  ✗ "c" ≠ "o" ≠ "on"  → c est OUVERT à droite, 1 seule lettre
+  ✗ "b" ≠ "bam" ≠ "ba" → b est 1 seule lettre (jambe + boucle), ne lis JAMAIS plus d'une lettre
+  ✗ "vi" ≠ "r"         → vi = DEUX lettres distinctes (v puis i)
+  ✗ "bl" ≠ "ll"        → le b a une boucle FERMÉE en bas, le l est droit
+  ✗ "doct" ≠ "dét"     → compte les lettres : d-o-c-t = 4 lettres
+  ✗ ne perds JAMAIS les lettres finales : d final (nœud), x final (vieux), t final, s final
 
-RÈGLES PAR AU ACTIF :
-${activeAUs.includes('AU12') ? '- AU12 : identifie le verbe principal de chaque consigne dans "action_verb".' : ''}
-${activeAUs.includes('AU13') ? '- AU13 : reformule les consignes longues/passives/ambiguës. Max 2 phrases.' : ''}
-${activeAUs.includes('AU14') ? '- AU14 : si consigne multi-actions, retourne tableau dans "bullet_items".' : ''}
-${activeAUs.includes('AU15') ? '- AU15 : génère une phrase d\'objectif dans "objective_sentence".' : ''}
-${activeAUs.includes('AU18') ? '- AU18 : génère exemple dans "example" et contre-exemple dans "counter_example".' : ''}
-${activeAUs.includes('AU19') ? '- AU19 : reformate les procédures en liste numérotée dans "steps".' : ''}
+MÉTHODE DE LECTURE OBLIGATOIRE pour chaque mot imprimé :
+  1. Compte le nombre de jambages/boucles visibles
+  2. Identifie chaque lettre individuellement (de gauche à droite)
+  3. Vérifie que ton nombre de lettres transcrites = nombre de lettres visibles
+  4. Si doute → [?]
+
+════════════════════════════════════════════════════════════
+  STRUCTURE ET MISE EN PAGE
+════════════════════════════════════════════════════════════
+
+- Colonnes : chaque item sur sa ligne, séparés par " | "
+- Tableaux : lignes et colonnes avec séparateur " | "
+- Listes en colonnes → une colonne par ligne
+- Types de blocs : title | instruction | body | exercise
+
+LACUNES ET EXERCICES :
+- Cases vides / tirets / pointillés → "____"
+- Mots partiels (lettres imprimées + blanc) : transcris EXACTEMENT les lettres visibles + "____"
+  Exemple : "un b____f" (le b ET le f sont imprimés, le blanc entre = "____")
+- Ne COMPLÈTE JAMAIS une lacune
+
+IMAGES : [IMAGE: description 5 mots max]
+
+════════════════════════════════════════════════════════════
+  RÈGLES PAR AU ACTIF (s'appliquent au champ "transformed" uniquement)
+════════════════════════════════════════════════════════════
+${activeAUs.includes('AU12') ? '- AU12 : verbe principal de chaque consigne dans "action_verb".' : ''}
+${activeAUs.includes('AU13') ? '- AU13 : reformule les consignes dans "transformed". Max 2 phrases.' : ''}
+${activeAUs.includes('AU14') ? '- AU14 : consigne multi-actions → "bullet_items" (infinitifs).' : ''}
+${activeAUs.includes('AU15') ? '- AU15 : phrase d\'objectif dans "objective_sentence".' : ''}
+${activeAUs.includes('AU18') ? '- AU18 : exemple dans "example", contre-exemple dans "counter_example".' : ''}
+${activeAUs.includes('AU19') ? '- AU19 : procédures → liste numérotée dans "steps".' : ''}
 ${activeAUs.includes('AU21') ? '- AU21 : niveau Bloom (1-6) dans "bloom_level".' : ''}
 ${activeAUs.includes('AU24') ? '- AU24 : phrase d\'encouragement dans "feedback_sentence".' : ''}
 
-${textAdaptation !== 'none' ? `PROFIL ${textAdaptation} :
+${textAdaptation !== 'none' ? `PROFIL ${textAdaptation} (champ "transformed" uniquement) :
 ${textAdaptation === 'DYS' ? '- Évite les mots avec lettres miroir en début de consigne.' : ''}
 ${textAdaptation === 'TDAH' ? '- Maximum 1 action par phrase.' : ''}
 ${textAdaptation === 'FLE' ? '- Vocabulaire B1 max. Glose les termes techniques.' : ''}
 ${textAdaptation === 'FALC' ? '- Phrases ≤ 12 mots. 1 idée par phrase.' : ''}
 ${textAdaptation === 'HP' ? '- Maintien complexité. Vocabulaire précis.' : ''}` : ''}
 
-PICTOGRAMMES : pour chaque bloc, "picto_words" = mots à pictogrammer (lemmatisés, sans article).
+PICTOGRAMMES : "picto_words" = mots à pictogrammer (lemmatisés, sans article).
 
-RÈGLES JSON CRITIQUES :
-- Guillemets dans les valeurs textuelles → remplace par apostrophe '
+RÈGLES JSON :
+- Guillemets dans les valeurs → apostrophe '
 - Tirets longs (—) → tirets courts (-)
-- Les seuls guillemets " autorisés sont les délimiteurs JSON
+- Les seuls " autorisés sont les délimiteurs JSON
 
 RETOURNE UNIQUEMENT ce JSON (page ${pageNumber}) :
 {
@@ -150,7 +179,7 @@ RETOURNE UNIQUEMENT ce JSON (page ${pageNumber}) :
     {
       "id": "p${pageNumber}-b1",
       "type": "title|instruction|body|exercise",
-      "original": "texte extrait fidèlement de l'image",
+      "original": "transcription EXACTE lettre par lettre — [?] si ambigu",
       "transformed": "texte adapté selon les AUs actifs",
       "action_verb": null,
       "bullet_items": null,
@@ -173,44 +202,65 @@ RETOURNE UNIQUEMENT ce JSON (page ${pageNumber}) :
 }`
 }
 
-// ── PROMPT PASSE 2 : Vérification et correction ──────────────────────────────
+// ── PROMPT PASSE 2 : Audit caractère par caractère ───────────────────────────
 function buildVerificationPrompt(language: string): string {
-  return `Tu es un correcteur expert en documents pédagogiques pour la Fédération Wallonie-Bruxelles (FWB).
-Tu reçois une image de page ET le JSON extrait en passe 1. Tu dois vérifier et corriger.
+  return `Tu es un auditeur expert de transcriptions de documents scolaires belges (FWB).
+Tu reçois l'image ET le JSON de la passe 1. Ta mission : audit caractère par caractère, corrections traçables.
 
 LANGUE : ${language}
 
-── CE QUE TU DOIS VÉRIFIER ────────────────────────────────────────────────────
+════════════════════════════════════════════════════════════
+  MÉTHODE D'AUDIT OBLIGATOIRE
+════════════════════════════════════════════════════════════
 
-1. COHÉRENCE PHONÉTIQUE (critique pour les feuilles d'exercices) :
-   - Vérifie chaque son transcrit en comparant avec l'image pixel par pixel
-   - Sons à vérifier impérativement :
-       eu (jeu, bleu, peu) ← e+u visible
-       eur (heure, beurre, fleur) ← e+u+r visible
-       oeu/œu (œuf, cœur, sœur) ← o+e+u ou œ visible
-       ou (loup, roue) ← o+u visible
-       ill (fille, bille, gorille) ← i+l+l visible
-   - Si le son extrait en passe 1 est différent de ce que tu vois dans l'image → corrige
+Pour CHAQUE bloc, pour le champ "original" :
 
-2. STRUCTURE ET COLONNES :
-   - Si l'image montre un tableau ou des colonnes → vérifie que la structure est préservée
-   - Si des items sont sur une même ligne alors qu'ils devraient être en colonne → corrige
-   - Format colonnes : chaque item sur sa ligne, colonnes séparées par " | "
+ÉTAPE 1 — COMPTAGE :
+  → Compte les lettres/caractères visibles dans l'image pour ce bloc
+  → Compare avec le nombre de caractères transcrits en passe 1
+  → Si différence → corrige
 
-3. LACUNES ET EXERCICES À COMPLÉTER :
-   - Vérifie que toutes les cases vides / pointillés sont bien représentés par "____"
-   - Vérifie que les mots partiels (avec lettres manquantes) sont fidèlement retranscrits
-   - Si la passe 1 a complété des lacunes → remets les "____"
+ÉTAPE 2 — LETTRE PAR LETTRE :
+  → Relis chaque caractère transcrit en le localisant dans l'image
+  → Vérifie sa forme (boucle, jambage, hauteur, ouverture)
 
-4. LECTURE DE MOTS :
-   - Vérifie les mots qui semblent incorrects (erreurs de lecture de l'écriture cursive)
-   - Concentre-toi sur les verbes des consignes (Lis, Écris, Complète, Entoure, etc.)
+ÉTAPE 3 — VÉRIFICATIONS CIBLÉES (confusions connues de la police cursive scolaire belge) :
+  ✓ Chaque "c" → est-il vraiment un c (ouvert à droite) ? Pas un o, pas "on" ?
+  ✓ Chaque "b" seul → est-il vraiment seul ? Pas "bam", pas "ba", pas "bl" ?
+  ✓ Séquences "vi" → sont-elles bien v+i et non r ?
+  ✓ Séquences "bl" → le premier caractère est-il bien b (boucle) et non l ?
+  ✓ Séquences "doct", "nœud", "pneu", "vieux" → tous les caractères sont-ils présents ?
+  ✓ Lettres finales → aucune lettre finale muette ne manque (d, x, t, s) ?
 
-5. JSON :
-   - Vérifie que le JSON est valide
-   - Guillemets dans les valeurs → apostrophes '
-   - Lacunes préservées comme "____"
+ÉTAPE 4 — CONSIGNES / TITRES :
+  ✓ Le texte d'une consigne ou d'un titre est-il EXACTEMENT ce qui est imprimé ?
+  ✓ Aucun mot inventé, aucune reformulation dans "original" ?
 
-RETOURNE UNIQUEMENT le JSON corrigé complet (même structure que la passe 1).
-Si la passe 1 était correcte, retourne-la telle quelle.`
+════════════════════════════════════════════════════════════
+  RAPPORT DES CORRECTIONS (obligatoire)
+════════════════════════════════════════════════════════════
+
+Dans le JSON final, ajoute ces deux champs au niveau racine :
+
+"pass2_corrections": [
+  "bloc p1-b2 : 'bam' → 'b' (b seul visible, pas bam)",
+  "bloc p1-b3 : 'r' → 'vi' (deux lettres distinctes visibles)",
+  ...
+],
+"uncertain_chars": [
+  "bloc p1-b4 : 3e caractère de 'original' incertain [?]",
+  ...
+]
+
+Si aucune correction → "pass2_corrections": [], "uncertain_chars": []
+
+════════════════════════════════════════════════════════════
+  RÈGLES ABSOLUES
+════════════════════════════════════════════════════════════
+- Ne complète JAMAIS les lacunes (____) — elles restent "____"
+- Ne reformule JAMAIS le champ "original" — seulement corriger les erreurs de lecture
+- "transformed" peut rester tel quel si la correction ne l'affecte pas
+- JSON valide : guillemets dans valeurs → apostrophes ', contrôles → échappés
+
+RETOURNE UNIQUEMENT le JSON corrigé complet (même structure que passe 1 + pass2_corrections + uncertain_chars).`
 }

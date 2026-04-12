@@ -124,6 +124,9 @@ export async function runConversionPipeline(
     picto_words_not_found: pictoWordsNotFound,
     blocks_rewritten: finalBlocks.filter(b => b.transformed !== b.original).length,
     warnings: [],
+    // Passe 2 Vision : corrections et incertitudes
+    pass2_corrections: rewriteResult?.pass2_corrections ?? [],
+    uncertain_chars: rewriteResult?.uncertain_chars ?? [],
   }
 
   return { previewHtml, docxBlob, report }
