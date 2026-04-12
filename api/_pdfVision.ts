@@ -134,15 +134,29 @@ MÉTHODE DE LECTURE OBLIGATOIRE pour chaque mot imprimé :
   STRUCTURE ET MISE EN PAGE
 ════════════════════════════════════════════════════════════
 
-- Colonnes : chaque item sur sa ligne, séparés par " | "
-- Tableaux : lignes et colonnes avec séparateur " | "
-- Listes en colonnes → une colonne par ligne
-- Types de blocs : title | instruction | body | exercise
+TYPES DE BLOCS : title | instruction | body | exercise
 
-LACUNES ET EXERCICES :
-- Cases vides / tirets / pointillés → "____"
-- Mots partiels (lettres imprimées + blanc) : transcris EXACTEMENT les lettres visibles + "____"
-  Exemple : "un b____f" (le b ET le f sont imprimés, le blanc entre = "____")
+EXERCICES (type = "exercise") — RÈGLE FONDAMENTALE D'ACCESSIBILITÉ :
+→ Chaque item d'exercice = UNE LIGNE SÉPARÉE, jamais en ligne avec " | "
+→ Format : une entrée par ligne, sans séparateur
+
+  CORRECT :
+    un jeu
+    jeudi
+    un peu
+    ma sœur
+
+  INCORRECT (jamais ça) :
+    un jeu | jeudi | un peu | ma sœur
+
+Tableaux (type = "body") : colonnes séparées par " | " sont autorisées seulement pour les tableaux structurés avec en-têtes.
+
+LACUNES ET BLANCS À COMPLÉTER :
+- Remplacement de toutes les cases vides / tirets / pointillés → " ___ " (3 underscores encadrés d'espaces)
+- Mots partiels (lettres imprimées + blanc) : transcris EXACTEMENT les lettres visibles + " ___ "
+  Exemple : "un b ___  f" → le b ET le f sont imprimés, le blanc entre = " ___ "
+- Longueur du blanc : toujours " ___ " (3 underscores) — jamais plus, jamais moins
+  Cela évite la confusion visuelle des longs traits avec des lettres (ex : l, i)
 - Ne COMPLÈTE JAMAIS une lacune
 
 IMAGES : [IMAGE: description 5 mots max]

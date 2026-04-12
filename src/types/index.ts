@@ -112,6 +112,20 @@ export interface AUProfile {
 
 export type ConversionStatus = 'pending' | 'processing' | 'done' | 'error'
 
+export interface AccessibilityCriterion {
+  id: string
+  label: string
+  status: 'ok' | 'warning' | 'fail'
+  detail: string
+}
+
+export interface AccessibilityResult {
+  score: number
+  level: 'excellent' | 'bon' | 'moyen' | 'insuffisant'
+  criteria: AccessibilityCriterion[]
+  recommendations: string[]
+}
+
 export interface ConversionReport {
   aus_applied: string[]
   aus_not_applicable: string[]
@@ -119,9 +133,11 @@ export interface ConversionReport {
   picto_words_not_found: string[]
   blocks_rewritten: number
   warnings: string[]
-  // Corrections effectuées par la passe 2 Vision (PDF uniquement)
+  // Corrections passe 2 Vision (PDF uniquement)
   pass2_corrections?: string[]
   uncertain_chars?: string[]
+  // Passe 3 : vérification accessibilité
+  accessibility?: AccessibilityResult
 }
 
 export interface Conversion {

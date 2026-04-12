@@ -3,9 +3,9 @@
  * Orchestre : parse → direct-AUs → claude-rewrite → arasaac → docx-build
  */
 
-import type { AUProfile, ConversionReport, ConversionStep } from '../types'
+import type { AUProfile, ConversionReport, ConversionStep, AccessibilityResult } from '../types'
 import { parseDocx, buildPreviewHtml } from './docxProcessor'
-import { rewriteWithClaude, rewritePdfWithVision } from './claudeRewriter'
+import { rewriteWithClaude, rewritePdfWithVision, checkAccessibility } from './claudeRewriter'
 import { pdfToImages } from './pdfProcessor'
 import { fetchPictosBatch } from './arasaac'
 import { buildDocx } from './docxBuilder'
@@ -116,6 +116,23 @@ export async function runConversionPipeline(
   const docxBlob = await buildDocx(finalBlocks, profile, pictoMap, file.name)
   onStep('build', 'done')
 
+  // ── Étape 7 : Vérification accessibilité (passe 3) ───────────────────────
+  let accessibility: AccessibilityResult | undefined
+  try {
+    onStep('accessibility', 'running')
+    accessibility = await checkAccessibility(
+      finalBlocks,
+      profile.text_adaptation,
+      profile.au_selections,
+      profile.language
+    )
+    onStep('accessibility', 'done')
+  } catch (e) {
+    // Non bloquant : la conversion reste disponible même si la vérif échoue
+    console.warn('[accessibility check failed]', e)
+    onStep('accessibility', 'error')
+  }
+
   // ── Rapport ──────────────────────────────────────────────────────────────
   const report: ConversionReport = {
     aus_applied: profile.au_selections.filter(id => !id.startsWith('AU-ENV')),
@@ -127,6 +144,8 @@ export async function runConversionPipeline(
     // Passe 2 Vision : corrections et incertitudes
     pass2_corrections: rewriteResult?.pass2_corrections ?? [],
     uncertain_chars: rewriteResult?.uncertain_chars ?? [],
+    // Passe 3 : vérification accessibilité
+    accessibility,
   }
 
   return { previewHtml, docxBlob, report }

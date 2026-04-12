@@ -1,5 +1,6 @@
 import { useApp } from '../store/AppContext'
 import { AU_CATALOG, AU_ENV_CATALOG } from '../data/auCatalog'
+import type { AccessibilityCriterion } from '../types'
 
 export default function ReportScreen() {
   const { state, dispatch } = useApp()
@@ -31,6 +32,62 @@ export default function ReportScreen() {
             ← Retour
           </button>
         </div>
+
+        {/* Score accessibilité — affiché en premier si disponible */}
+        {report.accessibility && (
+          <div className={`rounded-2xl p-5 border-2 ${
+            report.accessibility.level === 'excellent' ? 'border-emerald-400 bg-emerald-50' :
+            report.accessibility.level === 'bon'       ? 'border-blue-400 bg-blue-50' :
+            report.accessibility.level === 'moyen'     ? 'border-amber-400 bg-amber-50' :
+            'border-red-400 bg-red-50'
+          }`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-slate-800 text-lg">
+                ♿ Score d'accessibilité
+              </h2>
+              <div className="text-right">
+                <div className="text-4xl font-bold text-slate-800">{report.accessibility.score}<span className="text-xl text-slate-500">/100</span></div>
+                <div className={`text-sm font-semibold capitalize mt-0.5 ${
+                  report.accessibility.level === 'excellent' ? 'text-emerald-700' :
+                  report.accessibility.level === 'bon'       ? 'text-blue-700' :
+                  report.accessibility.level === 'moyen'     ? 'text-amber-700' :
+                  'text-red-700'
+                }`}>{report.accessibility.level}</div>
+              </div>
+            </div>
+
+            {/* Critères */}
+            <div className="space-y-1.5 mb-4">
+              {report.accessibility.criteria.map((c: AccessibilityCriterion) => (
+                <div key={c.id} className="flex items-start gap-2 text-sm">
+                  <span className="mt-0.5 flex-shrink-0">
+                    {c.status === 'ok' ? '✅' : c.status === 'warning' ? '⚠️' : '❌'}
+                  </span>
+                  <div>
+                    <span className="font-medium text-slate-700">{c.label}</span>
+                    {c.status !== 'ok' && (
+                      <span className="text-slate-500"> — {c.detail}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Recommandations */}
+            {report.accessibility.recommendations.length > 0 && (
+              <div className="border-t border-slate-200 pt-3">
+                <p className="text-xs font-semibold text-slate-600 mb-2">À corriger dans le DOCX :</p>
+                <ul className="space-y-1">
+                  {report.accessibility.recommendations.map((r, i) => (
+                    <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
+                      <span className="text-slate-400 mt-0.5 flex-shrink-0">→</span> {r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Statistiques */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

@@ -6,7 +6,7 @@
  * un endpoint Express minimal.
  */
 
-import type { TextAdaptation } from '../types'
+import type { TextAdaptation, AccessibilityResult } from '../types'
 
 export interface DocumentBlock {
   id: string
@@ -117,4 +117,30 @@ export async function rewritePdfWithVision(
     pass2_corrections: allCorrections,
     uncertain_chars: allUncertain,
   }
+}
+
+/**
+ * Passe 3 — Vérification accessibilité du document adapté
+ * Appel séparé après la conversion (endpoint Haiku, ~5-10s)
+ */
+export async function checkAccessibility(
+  blocks: RewrittenBlock[],
+  textAdaptation: TextAdaptation,
+  activeAUs: string[],
+  language: string
+): Promise<AccessibilityResult> {
+  const payload = blocks.map(b => ({ type: b.type, original: b.original, transformed: b.transformed }))
+
+  const response = await fetch('/api/accessibility-check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ blocks: payload, textAdaptation, activeAUs, language }),
+  })
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Accessibility check error: ${err}`)
+  }
+
+  return response.json()
 }

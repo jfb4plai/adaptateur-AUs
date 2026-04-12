@@ -4,11 +4,12 @@ import type { ConversionStep } from '../types'
 import { runConversionPipeline } from '../lib/conversionPipeline'
 
 const STEPS: Omit<ConversionStep, 'status'>[] = [
-  { id: 'parse',  label: 'Document chargé et analysé' },
-  { id: 'direct', label: 'Application des styles (AUs directs)' },
-  { id: 'claude', label: 'Analyse du contenu par Claude AI' },
-  { id: 'arasaac',label: 'Injection des pictogrammes Arasaac' },
-  { id: 'build',  label: 'Génération du DOCX final' },
+  { id: 'parse',         label: 'Document chargé et analysé' },
+  { id: 'direct',        label: 'Application des styles (AUs directs)' },
+  { id: 'claude',        label: 'Analyse du contenu par Claude AI' },
+  { id: 'arasaac',       label: 'Injection des pictogrammes Arasaac' },
+  { id: 'build',         label: 'Génération du DOCX final' },
+  { id: 'accessibility', label: 'Vérification accessibilité (passe 3)' },
 ]
 
 const STATUS_ICON: Record<ConversionStep['status'], string> = {
