@@ -25,7 +25,7 @@ export async function handleRewrite(body: RewriteRequest): Promise<string> {
   const systemPrompt = buildSystemPrompt(activeAUs, textAdaptation, language)
 
   const message = await client.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
+    model: 'claude-3-haiku-20240307',
     max_tokens: 8192,
     system: systemPrompt,
     messages: [
