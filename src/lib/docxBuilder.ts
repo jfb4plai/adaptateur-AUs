@@ -22,10 +22,22 @@ async function fetchImageAsBuffer(url: string): Promise<ArrayBuffer | null> {
   }
 }
 
+/** Extrait le mot d'un marqueur [IMG: mot], retourne null si absent */
+function extractImgWord(text: string): string | null {
+  const m = text.match(/^\[IMG:\s*([^\]]+)\]/)
+  return m ? m[1].trim() : null
+}
+
+/** Retire le marqueur [IMG: mot] du début d'un texte */
+function stripImgMarker(text: string): string {
+  return text.replace(/^\[IMG:\s*[^\]]+\]\s*/, '')
+}
+
 export async function buildDocx(
   blocks: RewrittenBlock[],
   profile: AUProfile,
   pictoMap: Map<string, number>,
+  illustrationPictoMap: Map<string, number>,
   _originalFilename: string
 ): Promise<Blob> {
   const { au_selections, picto_options } = profile
@@ -131,14 +143,40 @@ export async function buildDocx(
         : items
 
       for (const item of finalItems) {
+        const imgWord = extractImgWord(item)
+        const itemText = imgWord ? stripImgMarker(item) : item
+
+        // Chercher le pictogramme Arasaac pour l'illustration
+        const imgId = imgWord ? illustrationPictoMap.get(imgWord) : undefined
+        const imgBuf = imgId
+          ? await fetchImageAsBuffer(
+              `https://api.arasaac.org/v1/pictograms/${imgId}${profile.picto_options.color ? '' : '?color=false'}`
+            )
+          : null
+
+        const itemSize = Math.round(16 * (profile.picto_options.size_ratio ?? 1))
+        const runs: (TextRun | ImageRun)[] = [
+          new TextRun({ text: '›  ', bold: true, color: '3B82F6', font: defaultFont ?? 'Arial', size: defaultSize }),
+        ]
+
+        // Illustration : pictogramme Arasaac ou étiquette texte
+        if (imgWord) {
+          if (imgBuf) {
+            runs.push(new ImageRun({ type: 'png', data: imgBuf, transformation: { width: itemSize, height: itemSize } }))
+            runs.push(new TextRun({ text: '  ', font: defaultFont, size: defaultSize }))
+          } else {
+            // Non trouvé dans Arasaac → étiquette discrète
+            runs.push(new TextRun({ text: `[🖼 ${imgWord}]  `, color: '9CA3AF', italics: true, font: defaultFont, size: (defaultSize ?? 24) - 4 }))
+          }
+        }
+
+        runs.push(new TextRun({ text: itemText, font: defaultFont, size: defaultSize }))
+
         children.push(new Paragraph({
           alignment,
           spacing: { ...(lineSpacing ?? {}), before: 80, after: 80 },
           indent: { left: 440 },
-          children: [
-            new TextRun({ text: '›  ', bold: true, color: '3B82F6', font: defaultFont ?? 'Arial', size: defaultSize }),
-            new TextRun({ text: item, font: defaultFont, size: defaultSize }),
-          ],
+          children: runs,
         }))
       }
 

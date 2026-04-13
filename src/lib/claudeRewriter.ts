@@ -19,8 +19,9 @@ export interface RewrittenBlock {
   type: string
   original: string
   transformed: string
-  exercise_number: number | null  // numéro séquentiel de l'exercice (null si pas un exercice)
-  exercise_items: string[] | null // items d'exercice séparés (null si pas un exercice)
+  exercise_number: number | null    // numéro d'exercice (ex: 1, 2, 3)
+  exercise_items: string[] | null   // items verticaux d'un exercice
+  illustrations: string[]           // mots des [IMG: mot] de ce bloc
   action_verb: string | null
   bullet_items: string[] | null
   objective_sentence: string | null
@@ -41,7 +42,7 @@ export interface RewriteResult {
     reorder_instructions_first: boolean
     complexity_order: string[]
   }
-  // Passe 2 Vision : corrections et incertitudes (PDF uniquement)
+  illustration_words: string[]      // tous les mots [IMG: mot] du document → Arasaac
   pass2_corrections?: string[]
   uncertain_chars?: string[]
 }
@@ -116,6 +117,7 @@ export async function rewritePdfWithVision(
       reorder_instructions_first: reorderInstructions,
       complexity_order: complexityOrder,
     },
+    illustration_words: [],
     pass2_corrections: allCorrections,
     uncertain_chars: allUncertain,
   }
@@ -143,6 +145,47 @@ export async function rewritePdfDirect(
     throw new Error(`Claude PDF Direct error: ${err}`)
   }
 
+  return response.json()
+}
+
+/**
+ * NOUVEAU PIPELINE PDF — 2 passes séparées
+ *
+ * Passe 1 : transcription pure (qualité mobile app Claude)
+ * Passe 2 : adaptation AU sur texte propre → JSON fiable
+ */
+
+/** Passe 1 — Transcription fidèle du PDF en markdown */
+export async function transcribePdf(pdfBase64: string): Promise<string> {
+  const response = await fetch('/api/transcribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pdfBase64 }),
+  })
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Transcription error: ${err}`)
+  }
+  const { text } = await response.json()
+  return text
+}
+
+/** Passe 2 — Adaptation AU du texte transcrit → JSON structuré */
+export async function adaptWithAUs(
+  transcription: string,
+  activeAUs: string[],
+  textAdaptation: TextAdaptation,
+  language: string
+): Promise<RewriteResult> {
+  const response = await fetch('/api/adapt-au', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transcription, activeAUs, textAdaptation, language }),
+  })
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Adaptation AU error: ${err}`)
+  }
   return response.json()
 }
 

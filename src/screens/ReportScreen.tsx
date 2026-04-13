@@ -157,38 +157,19 @@ export default function ReportScreen() {
           </div>
         )}
 
-        {/* Corrections passe 2 Vision */}
-        {(report.pass2_corrections?.length ?? 0) > 0 && (
-          <div className="bg-white rounded-2xl border border-blue-200 p-5">
-            <h2 className="font-semibold text-blue-800 mb-1">🔍 Corrections auto-évaluation (passe 2)</h2>
-            <p className="text-xs text-slate-500 mb-3">
-              La passe 2 a détecté et corrigé ces erreurs de lecture cursive par rapport à la passe 1 :
-            </p>
-            <ul className="space-y-1">
-              {report.pass2_corrections!.map((c, i) => (
-                <li key={i} className="text-sm text-blue-700 flex items-start gap-2 font-mono">
-                  <span className="text-blue-400 mt-0.5">→</span> {c}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Caractères incertains */}
-        {(report.uncertain_chars?.length ?? 0) > 0 && (
+        {/* Illustrations → Arasaac */}
+        {(report.illustration_words_not_found?.length ?? 0) > 0 && (
           <div className="bg-white rounded-2xl border border-amber-200 p-5">
-            <h2 className="font-semibold text-amber-800 mb-1">⚠️ Caractères incertains [?] — à vérifier</h2>
+            <h2 className="font-semibold text-amber-800 mb-1">🖼 Illustrations sans pictogramme Arasaac</h2>
             <p className="text-xs text-slate-500 mb-3">
-              Ces caractères sont signalés [?] dans le document car ils étaient illisibles sur le scan.
-              Vérifiez-les dans le DOCX généré.
+              Ces illustrations ont été identifiées dans le document mais n'ont pas d'équivalent Arasaac.
+              Elles apparaissent avec leur description texte dans le DOCX.
             </p>
-            <ul className="space-y-1">
-              {report.uncertain_chars!.map((u, i) => (
-                <li key={i} className="text-sm text-amber-700 flex items-start gap-2">
-                  <span className="text-amber-400 mt-0.5">?</span> {u}
-                </li>
+            <div className="flex flex-wrap gap-2">
+              {report.illustration_words_not_found!.map((w: string) => (
+                <span key={w} className="bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full">{w}</span>
               ))}
-            </ul>
+            </div>
           </div>
         )}
 

@@ -133,10 +133,10 @@ export interface ConversionReport {
   picto_words_not_found: string[]
   blocks_rewritten: number
   warnings: string[]
-  // Corrections passe 2 Vision (PDF uniquement)
-  pass2_corrections?: string[]
-  uncertain_chars?: string[]
-  // Passe 3 : vérification accessibilité
+  // Illustrations [IMG: mot] → Arasaac
+  illustration_words_found?: number
+  illustration_words_not_found?: string[]
+  // Vérification accessibilité
   accessibility?: AccessibilityResult
 }
 

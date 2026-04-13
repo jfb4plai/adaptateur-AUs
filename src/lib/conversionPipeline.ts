@@ -1,13 +1,23 @@
 /**
- * Pipeline de conversion complet
- * Orchestre : parse → direct-AUs → claude-rewrite → arasaac → docx-build
+ * Pipeline de conversion complet — architecture 2 passes pour PDF
+ *
+ * PDF  → Passe 1 (transcription pure) → Passe 2 (adaptation AU) → Arasaac → DOCX
+ * DOCX → Parse texte → Adaptation AU → Arasaac → DOCX
  */
 
 import type { AUProfile, ConversionReport, ConversionStep, AccessibilityResult } from '../types'
 import { parseDocx, buildPreviewHtml } from './docxProcessor'
-import { rewriteWithClaude, rewritePdfDirect, checkAccessibility } from './claudeRewriter'
+import {
+  rewriteWithClaude,
+  transcribePdf,
+  adaptWithAUs,
+  checkAccessibility,
+} from './claudeRewriter'
+import type { RewrittenBlock } from './claudeRewriter'
+import { fetchPictosBatch } from './arasaac'
+import { buildDocx } from './docxBuilder'
 
-/** Lit un File en base64 (sans préfixe data:...) */
+/** Lit un File en base64 */
 async function fileToBase64(file: File): Promise<string> {
   const buf = await file.arrayBuffer()
   const bytes = new Uint8Array(buf)
@@ -15,8 +25,6 @@ async function fileToBase64(file: File): Promise<string> {
   for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
   return btoa(binary)
 }
-import { fetchPictosBatch } from './arasaac'
-import { buildDocx } from './docxBuilder'
 
 export type StepUpdater = (id: string, status: ConversionStep['status']) => void
 
@@ -33,18 +41,28 @@ export async function runConversionPipeline(
 ): Promise<ConversionOutput> {
   const isPdf = file.type === 'application/pdf'
 
-  // ── Étape 1 : Parse ──────────────────────────────────────────────────────
+  // ── Étape 1 : Chargement ─────────────────────────────────────────────────
   onStep('parse', 'running')
   const parsed = isPdf ? null : await parseDocx(file)
-  // PDF : lire en base64 pour envoi natif — pas d'extraction texte (OCR garbled)
   const pdfBase64 = isPdf ? await fileToBase64(file) : null
   onStep('parse', 'done')
 
-  // ── Étape 2 : Direct AUs ─────────────────────────────────────────────────
-  onStep('direct', 'running')
-  onStep('direct', 'done')
+  // ── Étape 2 : Transcription (PDF uniquement — passe 1) ───────────────────
+  let transcription: string | null = null
+  if (isPdf && pdfBase64) {
+    onStep('transcribe', 'running')
+    try {
+      transcription = await transcribePdf(pdfBase64)
+      onStep('transcribe', 'done')
+    } catch (e) {
+      onStep('transcribe', 'error')
+      throw e
+    }
+  } else {
+    onStep('transcribe', 'done')  // DOCX : étape non applicable
+  }
 
-  // ── Étape 3 : Claude document natif (PDF) ou texte (DOCX) ────────────────
+  // ── Étape 3 : Adaptation AU (passe 2 pour PDF, unique pour DOCX) ─────────
   const needsClaude = profile.au_selections.some(id =>
     ['AU11','AU12','AU13','AU14','AU15','AU18','AU19','AU20','AU21','AU22','AU23','AU24','AU26'].includes(id)
   )
@@ -53,16 +71,16 @@ export async function runConversionPipeline(
 
   onStep('claude', 'running')
   try {
-    if (isPdf && pdfBase64) {
-      // Tout PDF → document natif Claude (scan OU numérique)
-      // L'API document lit le contenu directement, sans extraction intermédiaire
-      rewriteResult = await rewritePdfDirect(
-        pdfBase64,
+    if (isPdf && transcription) {
+      // PDF : passe 2 sur le texte propre de la passe 1
+      rewriteResult = await adaptWithAUs(
+        transcription,
         profile.au_selections,
         profile.text_adaptation,
         profile.language
       )
     } else if (!isPdf && parsed && needsClaude) {
+      // DOCX : pipeline texte existant
       rewriteResult = await rewriteWithClaude(
         parsed.blocks,
         profile.au_selections,
@@ -76,15 +94,16 @@ export async function runConversionPipeline(
     throw e
   }
 
-  // Utiliser les blocs réécrits ou les blocs originaux
+  // Blocs finaux
   const sourceBlocks = parsed?.blocks ?? []
-  const finalBlocks = rewriteResult?.blocks ?? sourceBlocks.map(b => ({
+  const finalBlocks: RewrittenBlock[] = rewriteResult?.blocks ?? sourceBlocks.map(b => ({
     id: b.id,
     type: b.type,
     original: b.text,
     transformed: b.text,
     exercise_number: null,
     exercise_items: null,
+    illustrations: [],
     action_verb: null,
     bullet_items: null,
     objective_sentence: null,
@@ -99,7 +118,7 @@ export async function runConversionPipeline(
     picto_words: [],
   }))
 
-  // ── Étape 4 : Réordonnancement (structure_reorder) ────────────────────────
+  // ── Étape 4 : Réordonnancement ────────────────────────────────────────────
   if (rewriteResult?.structure_hints.reorder_instructions_first) {
     finalBlocks.sort((a, b) =>
       a.type === 'instruction' && b.type !== 'instruction' ? -1 :
@@ -107,27 +126,44 @@ export async function runConversionPipeline(
     )
   }
 
-  // ── Étape 5 : Arasaac ────────────────────────────────────────────────────
+  // ── Étape 5 : Arasaac (picto_words + illustrations) ──────────────────────
   let pictoMap = new Map<string, number>()
+  let illustrationPictoMap = new Map<string, number>()
   const pictoWordsNotFound: string[] = []
+  const illustrationWordsNotFound: string[] = []
 
+  onStep('arasaac', 'running')
+
+  // Picto_words (AU16 — mots du texte)
   if (profile.au_selections.includes('AU16')) {
-    onStep('arasaac', 'running')
     const allPictoWords = [...new Set(finalBlocks.flatMap(b => b.picto_words))]
     pictoMap = await fetchPictosBatch(allPictoWords, profile.language)
     allPictoWords.forEach(w => { if (!pictoMap.has(w)) pictoWordsNotFound.push(w) })
-    onStep('arasaac', 'done')
-  } else {
-    onStep('arasaac', 'done')
   }
+
+  // Illustrations [IMG: mot] — toujours cherchées, indépendamment de AU16
+  const allIllustrationWords = [
+    ...new Set([
+      ...(rewriteResult?.illustration_words ?? []),
+      ...finalBlocks.flatMap(b => b.illustrations ?? []),
+    ])
+  ]
+  if (allIllustrationWords.length > 0) {
+    illustrationPictoMap = await fetchPictosBatch(allIllustrationWords, profile.language)
+    allIllustrationWords.forEach(w => {
+      if (!illustrationPictoMap.has(w)) illustrationWordsNotFound.push(w)
+    })
+  }
+
+  onStep('arasaac', 'done')
 
   // ── Étape 6 : Build DOCX ─────────────────────────────────────────────────
   onStep('build', 'running')
   const previewHtml = buildPreviewHtml(finalBlocks, pictoMap, profile)
-  const docxBlob = await buildDocx(finalBlocks, profile, pictoMap, file.name)
+  const docxBlob = await buildDocx(finalBlocks, profile, pictoMap, illustrationPictoMap, file.name)
   onStep('build', 'done')
 
-  // ── Étape 7 : Vérification accessibilité (passe 3) ───────────────────────
+  // ── Étape 7 : Vérification accessibilité ─────────────────────────────────
   let accessibility: AccessibilityResult | undefined
   try {
     onStep('accessibility', 'running')
@@ -139,7 +175,6 @@ export async function runConversionPipeline(
     )
     onStep('accessibility', 'done')
   } catch (e) {
-    // Non bloquant : la conversion reste disponible même si la vérif échoue
     console.warn('[accessibility check failed]', e)
     onStep('accessibility', 'error')
   }
@@ -152,10 +187,8 @@ export async function runConversionPipeline(
     picto_words_not_found: pictoWordsNotFound,
     blocks_rewritten: finalBlocks.filter(b => b.transformed !== b.original).length,
     warnings: [],
-    // Passe 2 Vision : corrections et incertitudes
-    pass2_corrections: rewriteResult?.pass2_corrections ?? [],
-    uncertain_chars: rewriteResult?.uncertain_chars ?? [],
-    // Passe 3 : vérification accessibilité
+    illustration_words_found: illustrationPictoMap.size,
+    illustration_words_not_found: illustrationWordsNotFound,
     accessibility,
   }
 
