@@ -37,30 +37,53 @@ export async function buildDocx(
   const alignment = au_selections.includes('AU03') ? AlignmentType.LEFT : undefined
 
   const children: Paragraph[] = []
-  let lastExerciseNumber = 0  // pour ne pas répéter le header si déjà affiché
 
-  for (const block of blocks) {
+  // ── Numérotation automatique des exercices ───────────────────────────────
+  // Si Claude n'a pas fourni exercise_number, on le calcule en détectant
+  // les transitions instruction→exercise ou les blocs exercise consécutifs.
+  let autoExNum = 0
+  const normalizedBlocks = blocks.map((block, i) => {
+    if (block.exercise_number != null) return block  // Claude l'a fourni → on garde
+    // Calcul automatique : nouvelle instruction avant un exercice = nouvel exercice
+    const isNewExerciseGroup =
+      block.type === 'instruction' &&
+      blocks.slice(i + 1).find(b => b.type === 'exercise') !== undefined
+    if (isNewExerciseGroup) autoExNum++
+    const num = (block.type === 'instruction' || block.type === 'exercise') && autoExNum > 0
+      ? autoExNum
+      : null
+    return { ...block, exercise_number: num }
+  })
+
+  let lastExerciseNumber = 0
+
+  for (const block of normalizedBlocks) {
     const text = block.transformed || block.original
 
     // ── Séparateur visuel + numéro avant chaque exercice ─────────────────
-    if (block.exercise_number && block.exercise_number !== lastExerciseNumber) {
-      // Espace blanc avant l'exercice
+    if (block.exercise_number && block.exercise_number !== lastExerciseNumber
+        && block.type === 'instruction') {
+      // Espace blanc généreux avant l'exercice (sauf le premier)
+      if (lastExerciseNumber > 0) {
+        children.push(new Paragraph({ spacing: { before: 480, after: 0 }, children: [] }))
+      }
+      // Bandeau "━━━ Exercice N ━━━━━━━━━━━━━━━━"
+      const dashes = '━'.repeat(20)
       children.push(new Paragraph({
-        spacing: { before: 320, after: 80 },
-        children: [],
-      }))
-      // Ligne de séparation + numéro : "── Exercice 1 ──────────────"
-      children.push(new Paragraph({
-        spacing: { before: 0, after: 120 },
+        spacing: { before: 80, after: 160 },
+        shading: { fill: 'EFF6FF' },   // fond bleu très clair
         border: {
-          bottom: { style: BorderStyle.SINGLE, size: 6, color: '3B82F6', space: 6 },
+          top:    { style: BorderStyle.SINGLE, size: 8, color: '3B82F6', space: 4 },
+          bottom: { style: BorderStyle.SINGLE, size: 8, color: '3B82F6', space: 4 },
+          left:   { style: BorderStyle.SINGLE, size: 8, color: '3B82F6', space: 4 },
+          right:  { style: BorderStyle.SINGLE, size: 8, color: '3B82F6', space: 4 },
         },
         children: [
           new TextRun({
-            text: `Exercice ${block.exercise_number}`,
+            text: `${dashes}  Exercice ${block.exercise_number}  ${dashes}`,
             bold: true,
             color: '1D4ED8',
-            size: (defaultSize ?? 24) + 4,
+            size: (defaultSize ?? 24) + 2,
             font: defaultFont ?? 'Arial',
           }),
         ],
@@ -94,18 +117,26 @@ export async function buildDocx(
 
     // ── Exercice : items verticaux ────────────────────────────────────────
     } else if (block.type === 'exercise') {
-      // Priorité : exercise_items[] (tableau explicite), sinon split \n
-      const items: string[] = block.exercise_items?.length
+      // Priorité 1 : exercise_items[] (tableau explicite fourni par Claude)
+      // Priorité 2 : split sur \n
+      // Priorité 3 : le texte entier comme item unique
+      const raw: string[] = block.exercise_items?.length
         ? block.exercise_items
-        : text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0)
+        : text.split('\n')
+      const items = raw.map((l: string) => l.trim()).filter((l: string) => l.length > 0)
 
-      for (const item of items) {
+      // Si un seul item sans \n = Claude a tout mis en ligne → on tente split sur |
+      const finalItems = (items.length === 1 && items[0].includes('|'))
+        ? items[0].split('|').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
+        : items
+
+      for (const item of finalItems) {
         children.push(new Paragraph({
           alignment,
-          spacing: { ...(lineSpacing ?? {}), before: 60, after: 60 },
-          indent: { left: 360 },  // indentation 0.25 pouce pour bien distinguer des consignes
+          spacing: { ...(lineSpacing ?? {}), before: 80, after: 80 },
+          indent: { left: 440 },
           children: [
-            new TextRun({ text: '› ', color: '6B7280', font: defaultFont ?? 'Arial', size: defaultSize }),
+            new TextRun({ text: '›  ', bold: true, color: '3B82F6', font: defaultFont ?? 'Arial', size: defaultSize }),
             new TextRun({ text: item, font: defaultFont, size: defaultSize }),
           ],
         }))
