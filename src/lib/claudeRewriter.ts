@@ -19,6 +19,8 @@ export interface RewrittenBlock {
   type: string
   original: string
   transformed: string
+  exercise_number: number | null  // numéro séquentiel de l'exercice (null si pas un exercice)
+  exercise_items: string[] | null // items d'exercice séparés (null si pas un exercice)
   action_verb: string | null
   bullet_items: string[] | null
   objective_sentence: string | null

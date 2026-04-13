@@ -81,8 +81,48 @@ AMÉNAGEMENTS UNIVERSELS ACTIFS : ${activeAUs.join(', ')}
 - "original" = texte EXACTEMENT tel qu'il apparaît dans le document
 - Ne jamais inventer, compléter ou reformuler dans le champ "original"
 - Lacunes / blancs à remplir → " ___ " (3 underscores)
-- Chaque item d'exercice = UNE LIGNE SÉPARÉE (jamais en ligne avec |)
 - Types : title | instruction | body | exercise
+
+════════════════════════════════════════════════════════════
+  STRUCTURE DES EXERCICES — RÈGLE CRITIQUE POUR ÉLÈVES À BESOINS SPÉCIFIQUES
+════════════════════════════════════════════════════════════
+
+Un document pédagogique contient généralement plusieurs exercices distincts.
+Chaque exercice = une consigne (type "instruction") + des items (type "exercise").
+
+NUMÉROTATION OBLIGATOIRE :
+→ Numérote chaque exercice séquentiellement : 1, 2, 3...
+→ Renseigne ce numéro dans le champ "exercise_number" du bloc exercise ET du bloc instruction associé
+→ Si le document contient 3 exercices distincts → exercise_number 1, 2, 3
+
+ITEMS D'EXERCICE — RÈGLE ABSOLUE :
+→ Chaque item = UN ÉLÉMENT SÉPARÉ dans le tableau "exercise_items"
+→ JAMAIS mettre plusieurs items dans une seule chaîne
+→ Un item = une ligne de travail pour l'élève (un mot à compléter, une phrase à compléter, etc.)
+
+EXEMPLE pour "Ajoute les bonnes lettres" avec 11 mots :
+  "exercise_items": [
+    "un j ___ ",
+    "j ___ di",
+    "un p ___ ",
+    "ma s ___ r",
+    "un n ___ d",
+    "un b ___ f",
+    "bl ___ ",
+    "un vi ___ x",
+    "l'h ___ re",
+    "un c ___ r",
+    "un doct ___ r"
+  ]
+
+EXEMPLE pour phrases à compléter :
+  "exercise_items": [
+    "Elle mange un ___ œuf dur.",
+    "Maman dépose les ___ dans un vase.",
+    "Milan regarde l'___ à sa montre."
+  ]
+
+Le champ "transformed" doit contenir tous les items joints par \\n (pour compatibilité).
 
 ════════════════════════════════════════════════════════════
   ADAPTATION (champ "transformed" uniquement)
@@ -111,9 +151,31 @@ RETOURNE UNIQUEMENT ce JSON :
   "blocks": [
     {
       "id": "b1",
-      "type": "title|instruction|body|exercise",
-      "original": "texte exact du document",
-      "transformed": "texte adapté",
+      "type": "instruction",
+      "original": "consigne exacte du document",
+      "transformed": "consigne adaptée",
+      "exercise_number": 1,
+      "exercise_items": null,
+      "action_verb": null,
+      "bullet_items": null,
+      "objective_sentence": null,
+      "example": null,
+      "counter_example": null,
+      "steps": null,
+      "bloom_level": null,
+      "recommended_support": null,
+      "feedback_sentence": null,
+      "written_version": null,
+      "checkpoints": null,
+      "picto_words": []
+    },
+    {
+      "id": "b2",
+      "type": "exercise",
+      "original": "item1\\nitem2\\nitem3",
+      "transformed": "item1 adapté\\nitem2 adapté\\nitem3 adapté",
+      "exercise_number": 1,
+      "exercise_items": ["item1 adapté", "item2 adapté", "item3 adapté"],
       "action_verb": null,
       "bullet_items": null,
       "objective_sentence": null,

@@ -5,7 +5,7 @@
 
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
-  AlignmentType, Footer,
+  AlignmentType, Footer, BorderStyle,
   ImageRun,
 } from 'docx'
 import type { RewrittenBlock } from './claudeRewriter'
@@ -37,52 +37,103 @@ export async function buildDocx(
   const alignment = au_selections.includes('AU03') ? AlignmentType.LEFT : undefined
 
   const children: Paragraph[] = []
+  let lastExerciseNumber = 0  // pour ne pas répéter le header si déjà affiché
 
   for (const block of blocks) {
     const text = block.transformed || block.original
 
-    // Le texte peut contenir des \n (exercices en colonnes) → on crée un paragraphe par ligne
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
-    const firstLine = lines[0] ?? ''
-    const extraLines = lines.slice(1)
+    // ── Séparateur visuel + numéro avant chaque exercice ─────────────────
+    if (block.exercise_number && block.exercise_number !== lastExerciseNumber) {
+      // Espace blanc avant l'exercice
+      children.push(new Paragraph({
+        spacing: { before: 320, after: 80 },
+        children: [],
+      }))
+      // Ligne de séparation + numéro : "── Exercice 1 ──────────────"
+      children.push(new Paragraph({
+        spacing: { before: 0, after: 120 },
+        border: {
+          bottom: { style: BorderStyle.SINGLE, size: 6, color: '3B82F6', space: 6 },
+        },
+        children: [
+          new TextRun({
+            text: `Exercice ${block.exercise_number}`,
+            bold: true,
+            color: '1D4ED8',
+            size: (defaultSize ?? 24) + 4,
+            font: defaultFont ?? 'Arial',
+          }),
+        ],
+      }))
+      lastExerciseNumber = block.exercise_number
+    }
 
-    // ── Construire les runs pour la première ligne ────────────────────────
-    const runs: TextRun[] = []
-
-    if (block.type === 'instruction' && au_selections.includes('AU12') && block.action_verb) {
-      // Verbe en gras, reste normal
-      const verbIdx = firstLine.toLowerCase().indexOf(block.action_verb.toLowerCase())
-      if (verbIdx >= 0) {
-        if (verbIdx > 0) runs.push(new TextRun({ text: firstLine.slice(0, verbIdx), font: defaultFont, size: defaultSize }))
-        runs.push(new TextRun({ text: firstLine.slice(verbIdx, verbIdx + block.action_verb.length), bold: true, font: defaultFont, size: defaultSize }))
-        runs.push(new TextRun({ text: firstLine.slice(verbIdx + block.action_verb.length), font: defaultFont, size: defaultSize }))
+    // ── Consigne (instruction) ────────────────────────────────────────────
+    if (block.type === 'instruction') {
+      const runs: TextRun[] = []
+      if (au_selections.includes('AU12') && block.action_verb) {
+        const verbIdx = text.toLowerCase().indexOf(block.action_verb.toLowerCase())
+        if (verbIdx >= 0) {
+          if (verbIdx > 0) runs.push(new TextRun({ text: text.slice(0, verbIdx), font: defaultFont, size: defaultSize }))
+          runs.push(new TextRun({ text: text.slice(verbIdx, verbIdx + block.action_verb.length), bold: true, font: defaultFont, size: defaultSize }))
+          runs.push(new TextRun({ text: text.slice(verbIdx + block.action_verb.length), font: defaultFont, size: defaultSize }))
+        } else {
+          runs.push(new TextRun({ text, font: defaultFont, size: defaultSize }))
+        }
       } else {
-        runs.push(new TextRun({ text: firstLine, font: defaultFont, size: defaultSize }))
+        runs.push(new TextRun({ text, font: defaultFont, size: defaultSize }))
       }
-    } else {
-      runs.push(new TextRun({ text: firstLine, font: defaultFont, size: defaultSize }))
-    }
-
-    if (picto_options.audio.enabled) {
-      runs.push(new TextRun({ text: ' [audio]', font: defaultFont, size: defaultSize }))
-    }
-
-    const para = new Paragraph({
-      heading: block.type === 'title' ? HeadingLevel.HEADING_1 : undefined,
-      alignment,
-      spacing: lineSpacing,
-      children: runs,
-    })
-    children.push(para)
-
-    // ── Lignes supplémentaires (items d'exercice) ─────────────────────────
-    for (const line of extraLines) {
+      if (picto_options.audio.enabled) {
+        runs.push(new TextRun({ text: ' [audio]', font: defaultFont, size: defaultSize }))
+      }
       children.push(new Paragraph({
         alignment,
-        spacing: lineSpacing,
-        children: [new TextRun({ text: line, font: defaultFont, size: defaultSize })],
+        spacing: { ...(lineSpacing ?? {}), before: 80, after: 160 },
+        children: runs,
       }))
+
+    // ── Exercice : items verticaux ────────────────────────────────────────
+    } else if (block.type === 'exercise') {
+      // Priorité : exercise_items[] (tableau explicite), sinon split \n
+      const items: string[] = block.exercise_items?.length
+        ? block.exercise_items
+        : text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0)
+
+      for (const item of items) {
+        children.push(new Paragraph({
+          alignment,
+          spacing: { ...(lineSpacing ?? {}), before: 60, after: 60 },
+          indent: { left: 360 },  // indentation 0.25 pouce pour bien distinguer des consignes
+          children: [
+            new TextRun({ text: '› ', color: '6B7280', font: defaultFont ?? 'Arial', size: defaultSize }),
+            new TextRun({ text: item, font: defaultFont, size: defaultSize }),
+          ],
+        }))
+      }
+
+    // ── Titre ─────────────────────────────────────────────────────────────
+    } else if (block.type === 'title') {
+      children.push(new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        alignment,
+        spacing: lineSpacing,
+        children: [new TextRun({ text, font: defaultFont, size: defaultSize })],
+      }))
+
+    // ── Body (texte courant) ──────────────────────────────────────────────
+    } else {
+      const lines = text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0)
+      for (const line of lines) {
+        children.push(new Paragraph({
+          alignment,
+          spacing: lineSpacing,
+          children: [new TextRun({ text: line, font: defaultFont, size: defaultSize })],
+        }))
+      }
     }
+
+    // firstLine : uniquement pour les blocs AU qui annotent la consigne principale
+    const firstLine = text.split('\n')[0] ?? text
 
     // Objectif (AU15)
     if (au_selections.includes('AU15') && block.objective_sentence) {
