@@ -1,26 +1,178 @@
 /**
- * PDF Processor — rend chaque page du PDF en image PNG base64
- * via pdfjs-dist (canvas côté navigateur)
+ * PDF Processor
+ *
+ * Stratégie "texte d'abord" :
+ *   1. Tente d'extraire la couche texte du PDF (pdfjs getTextContent)
+ *   2. Si le texte est lisible (PDF numérique) → pipeline texte, comme un DOCX
+ *   3. Si le texte est vide ou illisible (scan) → fallback images PNG → Vision
+ *
+ * Cette approche élimine toutes les erreurs de transcription Vision
+ * pour les PDFs créés numériquement (police cursive scolaire incluse).
  */
-import * as pdfjsLib from 'pdfjs-dist'
 
-// Worker inline (évite les problèmes de CORS avec Vite)
+import * as pdfjsLib from 'pdfjs-dist'
+import type { DocumentBlock } from './claudeRewriter'
+
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString()
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 export interface PdfPage {
   pageNumber: number
-  base64: string       // PNG base64 sans le préfixe data:image/png;base64,
+  base64: string
   width: number
   height: number
 }
 
+export interface PdfTextResult {
+  isDigital: boolean          // true = texte lisible → pas besoin de Vision
+  blocks: DocumentBlock[]     // blocs texte reconstruits (si isDigital)
+  pages: PdfPage[]            // images PNG (si !isDigital, pour Vision)
+}
+
+// ── Extraction texte (PDF numérique) ─────────────────────────────────────────
+
 /**
- * Convertit un fichier PDF en tableau d'images PNG base64
- * Résolution : 3.0× (~216 DPI) — nécessaire pour lire la police cursive scolaire
- * À 1.5× les lettres cursives se confondent (b/ll, c/on, vi/r...)
+ * Tente d'extraire et reconstruire le texte d'un PDF.
+ * Retourne { isDigital: true, blocks } si le PDF est numérique lisible.
+ * Retourne { isDigital: false, pages } si c'est un scan → Vision nécessaire.
+ */
+export async function extractPdfContent(file: File): Promise<PdfTextResult> {
+  const arrayBuffer = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+
+  let allText = ''
+  const rawPages: { pageNum: number; items: Array<{ str: string; y: number; x: number; height: number }> }[] = []
+
+  // Extraire les items texte de chaque page
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const content = await page.getTextContent()
+
+    const items = content.items
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((item: any) => item.str !== undefined)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((item: any) => ({
+        str: item.str as string,
+        // transform[5] = y (bas de la ligne), transform[4] = x
+        y: Math.round(item.transform[5]),
+        x: Math.round(item.transform[4]),
+        height: Math.round(item.height ?? 10),
+      }))
+
+    rawPages.push({ pageNum: i, items })
+    allText += items.map(i => i.str).join(' ')
+  }
+
+  // Évaluer la lisibilité : ratio de caractères lisibles
+  if (!isReadableText(allText)) {
+    // Scan ou PDF image → fallback Vision
+    const pages = await pdfToImages(file)
+    return { isDigital: false, blocks: [], pages }
+  }
+
+  // PDF numérique → reconstruire les blocs
+  const blocks = reconstructBlocks(rawPages)
+  return { isDigital: true, blocks, pages: [] }
+}
+
+/**
+ * Évalue si le texte extrait est lisible (PDF numérique)
+ * vs du bruit (scan avec OCR dégradé ou PDF image sans texte)
+ */
+function isReadableText(text: string): boolean {
+  const trimmed = text.trim()
+  if (trimmed.length < 30) return false  // trop court = probablement vide
+
+  // Ratio lettres + chiffres + ponctuation courante / total
+  const readable = (trimmed.match(/[\p{L}\p{N}\s.,;:!?'"\-()«»_]/gu) ?? []).length
+  return readable / trimmed.length > 0.75
+}
+
+/**
+ * Regroupe les items texte par ligne (y proche) puis par paragraphe (gap vertical)
+ * et retourne des DocumentBlocks.
+ */
+function reconstructBlocks(
+  rawPages: { pageNum: number; items: Array<{ str: string; y: number; x: number; height: number }> }[]
+): DocumentBlock[] {
+  const blocks: DocumentBlock[] = []
+  let blockId = 0
+
+  for (const { pageNum, items } of rawPages) {
+    if (items.length === 0) continue
+
+    // Trier par y décroissant (pdfjs y=0 en bas), puis x croissant
+    const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x)
+
+    // Regrouper en lignes (même y ± tolérance)
+    const lines: string[] = []
+    let currentLine = ''
+    let lastY = sorted[0].y
+    const tolerance = Math.max(...items.map(i => i.height)) * 0.6 || 6
+
+    for (const item of sorted) {
+      if (Math.abs(item.y - lastY) > tolerance) {
+        if (currentLine.trim()) lines.push(currentLine.trim())
+        currentLine = item.str
+        lastY = item.y
+      } else {
+        currentLine += (currentLine && !currentLine.endsWith(' ') ? ' ' : '') + item.str
+      }
+    }
+    if (currentLine.trim()) lines.push(currentLine.trim())
+
+    // Regrouper les lignes en blocs (paragraphes) — une ligne vide = nouveau bloc
+    let currentParagraph: string[] = []
+
+    const flushParagraph = () => {
+      const text = currentParagraph.join('\n').trim()
+      if (!text) return
+      blockId++
+      blocks.push({
+        id: `p${pageNum}-b${blockId}`,
+        type: inferBlockType(text),
+        text,
+      })
+      currentParagraph = []
+    }
+
+    for (const line of lines) {
+      if (line === '') {
+        flushParagraph()
+      } else {
+        currentParagraph.push(line)
+      }
+    }
+    flushParagraph()
+  }
+
+  return blocks
+}
+
+/**
+ * Déduit le type de bloc depuis le contenu textuel.
+ */
+function inferBlockType(text: string): DocumentBlock['type'] {
+  const t = text.trim()
+  // Titre court (≤ 6 mots, pas de ponctuation finale)
+  if (t.split(/\s+/).length <= 6 && !/[.!?]$/.test(t)) return 'title'
+  // Consigne (verbe d'action + impératif)
+  if (/^(Lis|Écris|Entoure|Complète|Relie|Choisis|Ajoute|Souligne|Barre|Classe|Associe|Colorie|Observe|Réponds)/i.test(t)) return 'instruction'
+  // Exercice (lacunes, tirets, pointillés)
+  if (/_{2,}|\.{3,}|\[.*\]/.test(t)) return 'exercise'
+  return 'body'
+}
+
+// ── Fallback : rendu PNG pour Vision (scan) ───────────────────────────────────
+
+/**
+ * Convertit un PDF en images PNG base64 (fallback pour les scans uniquement).
+ * Résolution 3.0× pour lire les polices cursives scolaires.
  */
 export async function pdfToImages(file: File, scale = 3.0): Promise<PdfPage[]> {
   const arrayBuffer = await file.arrayBuffer()
@@ -39,7 +191,6 @@ export async function pdfToImages(file: File, scale = 3.0): Promise<PdfPage[]> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await page.render({ canvasContext: ctx, viewport } as any).promise
 
-    // Extraire le PNG en base64 (sans le préfixe)
     const dataUrl = canvas.toDataURL('image/png')
     const base64 = dataUrl.replace('data:image/png;base64,', '')
 
@@ -50,7 +201,6 @@ export async function pdfToImages(file: File, scale = 3.0): Promise<PdfPage[]> {
       height: Math.round(viewport.height),
     })
 
-    // Libérer la mémoire canvas
     canvas.width = 0
     canvas.height = 0
   }

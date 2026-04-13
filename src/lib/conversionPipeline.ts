@@ -6,7 +6,7 @@
 import type { AUProfile, ConversionReport, ConversionStep, AccessibilityResult } from '../types'
 import { parseDocx, buildPreviewHtml } from './docxProcessor'
 import { rewriteWithClaude, rewritePdfWithVision, checkAccessibility } from './claudeRewriter'
-import { pdfToImages } from './pdfProcessor'
+import { extractPdfContent } from './pdfProcessor'
 import { fetchPictosBatch } from './arasaac'
 import { buildDocx } from './docxBuilder'
 
@@ -28,15 +28,15 @@ export async function runConversionPipeline(
   // ── Étape 1 : Parse ──────────────────────────────────────────────────────
   onStep('parse', 'running')
   const parsed = isPdf ? null : await parseDocx(file)
-  const pdfPages = isPdf ? await pdfToImages(file) : null
+  // PDF : tente extraction texte d'abord, fallback images si scan
+  const pdfContent = isPdf ? await extractPdfContent(file) : null
   onStep('parse', 'done')
 
   // ── Étape 2 : Direct AUs ─────────────────────────────────────────────────
   onStep('direct', 'running')
-  // Pour PDF : appliquées après reconstruction — marquage uniquement
   onStep('direct', 'done')
 
-  // ── Étape 3 : Claude (DOCX) ou Vision (PDF) ───────────────────────────────
+  // ── Étape 3 : Claude texte (DOCX ou PDF numérique) ou Vision (scan) ───────
   const needsClaude = profile.au_selections.some(id =>
     ['AU11','AU12','AU13','AU14','AU15','AU18','AU19','AU20','AU21','AU22','AU23','AU24','AU26'].includes(id)
   )
@@ -45,10 +45,18 @@ export async function runConversionPipeline(
 
   onStep('claude', 'running')
   try {
-    if (isPdf && pdfPages) {
-      // PDF → Vision : 1 appel par page, Claude voit l'image complète
+    if (isPdf && pdfContent?.isDigital) {
+      // PDF numérique → même pipeline que DOCX (texte extrait proprement)
+      rewriteResult = await rewriteWithClaude(
+        pdfContent.blocks,
+        profile.au_selections,
+        profile.text_adaptation,
+        profile.language
+      )
+    } else if (isPdf && pdfContent && !pdfContent.isDigital) {
+      // PDF scan → Vision (fallback uniquement)
       rewriteResult = await rewritePdfWithVision(
-        pdfPages,
+        pdfContent.pages,
         profile.au_selections,
         profile.text_adaptation,
         profile.language
@@ -140,7 +148,9 @@ export async function runConversionPipeline(
     picto_words_found: pictoMap.size,
     picto_words_not_found: pictoWordsNotFound,
     blocks_rewritten: finalBlocks.filter(b => b.transformed !== b.original).length,
-    warnings: [],
+    warnings: isPdf && pdfContent && !pdfContent.isDigital
+      ? ['PDF scanné détecté — transcription via Vision (des erreurs sont possibles sur les polices cursives)']
+      : [],
     // Passe 2 Vision : corrections et incertitudes
     pass2_corrections: rewriteResult?.pass2_corrections ?? [],
     uncertain_chars: rewriteResult?.uncertain_chars ?? [],
