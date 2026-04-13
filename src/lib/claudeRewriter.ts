@@ -170,9 +170,10 @@ export async function transcribePdf(pdfBase64: string): Promise<string> {
   return text
 }
 
-/** Passe 2 — Adaptation AU du texte transcrit → JSON structuré */
+/** Passe 2 — Vérification + Adaptation AU (avec accès au PDF original) */
 export async function adaptWithAUs(
   transcription: string,
+  pdfBase64: string,
   activeAUs: string[],
   textAdaptation: TextAdaptation,
   language: string
@@ -180,7 +181,7 @@ export async function adaptWithAUs(
   const response = await fetch('/api/adapt-au', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transcription, activeAUs, textAdaptation, language }),
+    body: JSON.stringify({ transcription, pdfBase64, activeAUs, textAdaptation, language }),
   })
   if (!response.ok) {
     const err = await response.text()

@@ -71,10 +71,11 @@ export async function runConversionPipeline(
 
   onStep('claude', 'running')
   try {
-    if (isPdf && transcription) {
-      // PDF : passe 2 sur le texte propre de la passe 1
+    if (isPdf && transcription && pdfBase64) {
+      // PDF : passe 2 avec transcription + PDF original (correction croisée)
       rewriteResult = await adaptWithAUs(
         transcription,
+        pdfBase64,
         profile.au_selections,
         profile.text_adaptation,
         profile.language

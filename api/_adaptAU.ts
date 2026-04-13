@@ -1,11 +1,13 @@
 /**
- * PASSE 2 — Adaptation AU
- * Input  : texte markdown propre (produit par _transcribe.ts)
+ * PASSE 2 — Vérification + Adaptation AU
+ * Input  : texte markdown (passe 1) + PDF original (base64)
  * Output : JSON structuré pour le DOCX builder
  *
- * Séparation des responsabilités :
- *   Passe 1 = transcrire fidèlement (qualité mobile app Claude)
- *   Passe 2 = adapter selon les AUs (JSON fiable car input propre)
+ * Pourquoi le PDF est passé ici aussi :
+ *   La passe 1 peut faire des erreurs de transcription ("fl___" au lieu de "bl___").
+ *   La passe 2, sans le PDF, est aveugle à ces erreurs et les propage.
+ *   Avec le PDF : le modèle compare la transcription à l'image et corrige avant d'adapter.
+ *   C'est ce que fait claude.ai en un seul appel — on l'émule en 2 passes ciblées.
  */
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -16,13 +18,14 @@ const MODEL = 'claude-sonnet-4-20250514'
 
 interface AdaptAURequest {
   transcription: string        // Markdown produit par la passe 1
+  pdfBase64: string            // PDF original — pour vérification croisée
   activeAUs: string[]
   textAdaptation: TextAdaptation
   language: string
 }
 
 export async function handleAdaptAU(body: AdaptAURequest): Promise<string> {
-  const { transcription, activeAUs, textAdaptation, language } = body
+  const { transcription, pdfBase64, activeAUs, textAdaptation, language } = body
 
   const result = await client.messages.create({
     model: MODEL,
@@ -31,7 +34,17 @@ export async function handleAdaptAU(body: AdaptAURequest): Promise<string> {
     messages: [
       {
         role: 'user',
-        content: `Voici la transcription du document pédagogique (passe 1) :\n\n${transcription}\n\nApplique les adaptations demandées et retourne le JSON.`,
+        content: [
+          // Le PDF original — pour corriger les erreurs de transcription
+          {
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 },
+          } as any,
+          {
+            type: 'text',
+            text: `Voici la transcription de la passe 1 :\n\n${transcription}\n\nVérifie la transcription par rapport au PDF ci-dessus, corrige les erreurs, puis applique les adaptations AU. Retourne le JSON.`,
+          },
+        ],
       },
     ],
   })
