@@ -34,20 +34,26 @@ export interface ConversionOutput {
   report: ConversionReport
 }
 
-export async function runConversionPipeline(
+/** Résultat de Phase 1 — blocs prêts à corriger avant génération DOCX */
+export interface Phase1Result {
+  blocks: RewrittenBlock[]
+  illustration_words: string[]   // collectés par Claude, utilisés en Phase 2
+  filename: string
+}
+
+/** Phase 1 : parse + transcription + adaptation Claude → blocs corrigeables */
+export async function runPhase1(
   file: File,
   profile: AUProfile,
   onStep: StepUpdater
-): Promise<ConversionOutput> {
+): Promise<Phase1Result> {
   const isPdf = file.type === 'application/pdf'
 
-  // ── Étape 1 : Chargement ─────────────────────────────────────────────────
   onStep('parse', 'running')
   const parsed = isPdf ? null : await parseDocx(file)
   const pdfBase64 = isPdf ? await fileToBase64(file) : null
   onStep('parse', 'done')
 
-  // ── Étape 2 : Transcription (PDF uniquement — passe 1) ───────────────────
   let transcription: string | null = null
   let transcriptionAnalysis: string = ''
   if (isPdf && pdfBase64) {
@@ -62,36 +68,20 @@ export async function runConversionPipeline(
       throw e
     }
   } else {
-    onStep('transcribe', 'done')  // DOCX : étape non applicable
+    onStep('transcribe', 'done')
   }
 
-  // ── Étape 3 : Adaptation AU (passe 2 pour PDF, unique pour DOCX) ─────────
   const needsClaude = profile.au_selections.some(id =>
     ['AU11','AU12','AU13','AU14','AU15','AU18','AU19','AU20','AU21','AU22','AU23','AU24','AU26'].includes(id)
   )
 
   let rewriteResult: Awaited<ReturnType<typeof rewriteWithClaude>> | null = null
-
   onStep('claude', 'running')
   try {
     if (isPdf && transcription && pdfBase64) {
-      // PDF : passe 2 avec transcription + PDF original (correction croisée)
-      rewriteResult = await adaptWithAUs(
-        transcription,
-        pdfBase64,
-        profile.au_selections,
-        profile.text_adaptation,
-        profile.language,
-        transcriptionAnalysis   // analyse pédagogique Pass 1 → contexte pour Pass 2
-      )
+      rewriteResult = await adaptWithAUs(transcription, pdfBase64, profile.au_selections, profile.text_adaptation, profile.language, transcriptionAnalysis)
     } else if (!isPdf && parsed && needsClaude) {
-      // DOCX : pipeline texte existant
-      rewriteResult = await rewriteWithClaude(
-        parsed.blocks,
-        profile.au_selections,
-        profile.text_adaptation,
-        profile.language
-      )
+      rewriteResult = await rewriteWithClaude(parsed.blocks, profile.au_selections, profile.text_adaptation, profile.language)
     }
     onStep('claude', 'done')
   } catch (e) {
@@ -99,58 +89,50 @@ export async function runConversionPipeline(
     throw e
   }
 
-  // Blocs finaux
   const sourceBlocks = parsed?.blocks ?? []
-  const finalBlocks: RewrittenBlock[] = rewriteResult?.blocks ?? sourceBlocks.map(b => ({
-    id: b.id,
-    type: b.type,
-    original: b.text,
-    transformed: b.text,
-    exercise_number: null,
-    exercise_items: null,
-    illustrations: [],
-    action_verb: null,
-    bullet_items: null,
-    objective_sentence: null,
-    example: null,
-    counter_example: null,
-    steps: null,
-    bloom_level: null,
-    recommended_support: null,
-    feedback_sentence: null,
-    written_version: null,
-    checkpoints: null,
-    picto_words: [],
+  const blocks: RewrittenBlock[] = rewriteResult?.blocks ?? sourceBlocks.map(b => ({
+    id: b.id, type: b.type, original: b.text, transformed: b.text,
+    exercise_number: null, exercise_items: null, illustrations: [],
+    action_verb: null, bullet_items: null, objective_sentence: null,
+    example: null, counter_example: null, steps: null, bloom_level: null,
+    recommended_support: null, feedback_sentence: null, written_version: null,
+    checkpoints: null, picto_words: [],
   }))
 
-  // ── Étape 4 : Réordonnancement (DOCX uniquement) ─────────────────────────
-  // Désactivé pour PDF : l'ordre instruction→items doit être celui du document
   if (!isPdf && rewriteResult?.structure_hints.reorder_instructions_first) {
-    finalBlocks.sort((a, b) =>
+    blocks.sort((a, b) =>
       a.type === 'instruction' && b.type !== 'instruction' ? -1 :
       b.type === 'instruction' && a.type !== 'instruction' ? 1 : 0
     )
   }
 
-  // ── Étape 5 : Arasaac (picto_words + illustrations) ──────────────────────
+  return {
+    blocks,
+    illustration_words: rewriteResult?.illustration_words ?? [],
+    filename: file.name,
+  }
+}
+
+/** Phase 2 : Arasaac + build DOCX + vérification accessibilité */
+export async function runPhase2(
+  phase1: Phase1Result,
+  profile: AUProfile,
+  onStep: StepUpdater
+): Promise<ConversionOutput> {
+  const { blocks: finalBlocks, illustration_words, filename } = phase1
+
   let pictoMap = new Map<string, number>()
   let illustrationPictoMap = new Map<string, number>()
   const pictoWordsNotFound: string[] = []
   const illustrationWordsNotFound: string[] = []
 
   onStep('arasaac', 'running')
-
-  // Picto_words (AU16 — mots du texte)
   if (profile.au_selections.includes('AU16')) {
     const allPictoWords = [...new Set(finalBlocks.flatMap(b => b.picto_words))]
     pictoMap = await fetchPictosBatch(allPictoWords, profile.language)
     allPictoWords.forEach(w => { if (!pictoMap.has(w)) pictoWordsNotFound.push(w) })
   }
 
-  // Illustrations [IMG: mot] — toujours cherchées, indépendamment de AU16
-  // Source 1 : illustration_words déclarés par le modèle (racine JSON)
-  // Source 2 : champ illustrations[] par bloc (si populé)
-  // Source 3 : extraction déterministe depuis exercise_items (fallback si le modèle oublie)
   const imgTagPattern = /\[IMG:\s*([^\]]+)\]/g
   const extractedFromItems = finalBlocks.flatMap(b =>
     (b.exercise_items ?? []).flatMap(item => {
@@ -159,44 +141,29 @@ export async function runConversionPipeline(
     })
   )
   const allIllustrationWords = [
-    ...new Set([
-      ...(rewriteResult?.illustration_words ?? []),
-      ...finalBlocks.flatMap(b => b.illustrations ?? []),
-      ...extractedFromItems,
-    ])
+    ...new Set([...illustration_words, ...finalBlocks.flatMap(b => b.illustrations ?? []), ...extractedFromItems])
   ]
   if (allIllustrationWords.length > 0) {
     illustrationPictoMap = await fetchPictosBatch(allIllustrationWords, profile.language)
-    allIllustrationWords.forEach(w => {
-      if (!illustrationPictoMap.has(w)) illustrationWordsNotFound.push(w)
-    })
+    allIllustrationWords.forEach(w => { if (!illustrationPictoMap.has(w)) illustrationWordsNotFound.push(w) })
   }
-
   onStep('arasaac', 'done')
 
-  // ── Étape 6 : Build DOCX ─────────────────────────────────────────────────
   onStep('build', 'running')
   const previewHtml = buildPreviewHtml(finalBlocks, pictoMap, profile)
-  const docxBlob = await buildDocx(finalBlocks, profile, pictoMap, illustrationPictoMap, file.name)
+  const docxBlob = await buildDocx(finalBlocks, profile, pictoMap, illustrationPictoMap, filename)
   onStep('build', 'done')
 
-  // ── Étape 7 : Vérification accessibilité ─────────────────────────────────
   let accessibility: AccessibilityResult | undefined
   try {
     onStep('accessibility', 'running')
-    accessibility = await checkAccessibility(
-      finalBlocks,
-      profile.text_adaptation,
-      profile.au_selections,
-      profile.language
-    )
+    accessibility = await checkAccessibility(finalBlocks, profile.text_adaptation, profile.au_selections, profile.language)
     onStep('accessibility', 'done')
   } catch (e) {
     console.warn('[accessibility check failed]', e)
     onStep('accessibility', 'error')
   }
 
-  // ── Rapport ──────────────────────────────────────────────────────────────
   const report: ConversionReport = {
     aus_applied: profile.au_selections.filter(id => !id.startsWith('AU-ENV')),
     aus_not_applicable: profile.au_selections.filter(id => id.startsWith('AU-ENV')),
@@ -210,4 +177,14 @@ export async function runConversionPipeline(
   }
 
   return { previewHtml, docxBlob, report }
+}
+
+/** Pipeline complet sans pause (rétrocompatibilité) */
+export async function runConversionPipeline(
+  file: File,
+  profile: AUProfile,
+  onStep: StepUpdater
+): Promise<ConversionOutput> {
+  const phase1 = await runPhase1(file, profile, onStep)
+  return runPhase2(phase1, profile, onStep)
 }
