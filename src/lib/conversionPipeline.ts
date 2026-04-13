@@ -49,10 +49,13 @@ export async function runConversionPipeline(
 
   // ── Étape 2 : Transcription (PDF uniquement — passe 1) ───────────────────
   let transcription: string | null = null
+  let transcriptionAnalysis: string = ''
   if (isPdf && pdfBase64) {
     onStep('transcribe', 'running')
     try {
-      transcription = await transcribePdf(pdfBase64)
+      const t1 = await transcribePdf(pdfBase64)
+      transcription = t1.text
+      transcriptionAnalysis = t1.analysis
       onStep('transcribe', 'done')
     } catch (e) {
       onStep('transcribe', 'error')
@@ -78,7 +81,8 @@ export async function runConversionPipeline(
         pdfBase64,
         profile.au_selections,
         profile.text_adaptation,
-        profile.language
+        profile.language,
+        transcriptionAnalysis   // analyse pédagogique Pass 1 → contexte pour Pass 2
       )
     } else if (!isPdf && parsed && needsClaude) {
       // DOCX : pipeline texte existant

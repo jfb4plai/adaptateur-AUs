@@ -22,10 +22,16 @@ interface AdaptAURequest {
   activeAUs: string[]
   textAdaptation: TextAdaptation
   language: string
+  analysis?: string            // Analyse pédagogique Pass 1 (thème, niveau, réponses, images)
 }
 
 export async function handleAdaptAU(body: AdaptAURequest): Promise<string> {
-  const { transcription, pdfBase64, activeAUs, textAdaptation, language } = body
+  const { transcription, pdfBase64, activeAUs, textAdaptation, language, analysis } = body
+
+  // Contexte pédagogique issu de la Pass 1 — injecté dans le message utilisateur
+  const analysisBlock = analysis
+    ? `\n\n══════════════════════════════════════\nCONTEXTE PÉDAGOGIQUE (analyse Pass 1)\n══════════════════════════════════════\n${analysis}\n\nCe contexte est FIABLE. Utilise-le pour :\n• Valider chaque consigne (cohérente avec le thème et le niveau ?)\n• Corriger les transcriptions ambiguës avec certitude\n• Ne jamais confondre les exercices entre eux\n══════════════════════════════════════\n`
+    : ''
 
   const result = await client.messages.create({
     model: MODEL,
@@ -42,7 +48,7 @@ export async function handleAdaptAU(body: AdaptAURequest): Promise<string> {
           } as any,
           {
             type: 'text',
-            text: `Voici la transcription de la passe 1 :\n\n${transcription}\n\nVérifie la transcription par rapport au PDF ci-dessus, corrige les erreurs, puis applique les adaptations AU. Retourne le JSON.`,
+            text: `Voici la transcription de la passe 1 :${analysisBlock}\n\n${transcription}\n\nVérifie la transcription par rapport au PDF, corrige les erreurs en t'appuyant sur le contexte pédagogique, puis applique les adaptations AU. Retourne le JSON.`,
           },
         ],
       },

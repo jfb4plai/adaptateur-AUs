@@ -155,8 +155,13 @@ export async function rewritePdfDirect(
  * Passe 2 : adaptation AU sur texte propre → JSON fiable
  */
 
-/** Passe 1 — Transcription fidèle du PDF en markdown */
-export async function transcribePdf(pdfBase64: string): Promise<string> {
+export interface TranscribeResult {
+  text: string      // markdown pour Pass 2
+  analysis: string  // analyse pédagogique (thème, niveau, réponses, images)
+}
+
+/** Passe 1 — Transcription fidèle du PDF en markdown + analyse pédagogique */
+export async function transcribePdf(pdfBase64: string): Promise<TranscribeResult> {
   const response = await fetch('/api/transcribe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -166,22 +171,22 @@ export async function transcribePdf(pdfBase64: string): Promise<string> {
     const err = await response.text()
     throw new Error(`Transcription error: ${err}`)
   }
-  const { text } = await response.json()
-  return text
+  return response.json()   // { text, analysis }
 }
 
-/** Passe 2 — Vérification + Adaptation AU (avec accès au PDF original) */
+/** Passe 2 — Vérification + Adaptation AU (avec accès au PDF original + analyse Pass 1) */
 export async function adaptWithAUs(
   transcription: string,
   pdfBase64: string,
   activeAUs: string[],
   textAdaptation: TextAdaptation,
-  language: string
+  language: string,
+  analysis?: string    // analyse pédagogique produite par Pass 1
 ): Promise<RewriteResult> {
   const response = await fetch('/api/adapt-au', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ transcription, pdfBase64, activeAUs, textAdaptation, language }),
+    body: JSON.stringify({ transcription, pdfBase64, activeAUs, textAdaptation, language, analysis }),
   })
   if (!response.ok) {
     const err = await response.text()

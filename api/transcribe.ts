@@ -10,8 +10,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    const text = await handleTranscribe(req.body)
-    return res.status(200).json({ text })
+    const result = await handleTranscribe(req.body)
+    return res.status(200).json(result)   // { text, analysis }
   } catch (e: any) {
     console.error('[transcribe]', e)
     return res.status(500).json({ error: e.message })

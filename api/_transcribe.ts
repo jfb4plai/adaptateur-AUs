@@ -14,7 +14,12 @@ interface TranscribeRequest {
   pdfBase64: string
 }
 
-export async function handleTranscribe(body: TranscribeRequest): Promise<string> {
+export interface TranscribeResult {
+  text: string       // markdown transcription (Pass 2 input)
+  analysis: string   // pedagogical analysis (passed to Pass 2 as context)
+}
+
+export async function handleTranscribe(body: TranscribeRequest): Promise<TranscribeResult> {
   const result = await client.messages.create({
     model: MODEL,
     max_tokens: 5000,
@@ -39,10 +44,16 @@ export async function handleTranscribe(body: TranscribeRequest): Promise<string>
   const text = result.content[0]
   if (text.type !== 'text') throw new Error('Unexpected response type (transcribe)')
 
-  // Extraire uniquement la partie TRANSCRIPTION (après le séparateur)
   const raw = text.text
   const sep = raw.indexOf('---TRANSCRIPTION---')
-  return sep >= 0 ? raw.slice(sep + '---TRANSCRIPTION---'.length).trim() : raw
+  if (sep >= 0) {
+    return {
+      analysis: raw.slice(0, sep).trim(),
+      text: raw.slice(sep + '---TRANSCRIPTION---'.length).trim(),
+    }
+  }
+  // Fallback : pas de séparateur → tout est transcription
+  return { analysis: '', text: raw }
 }
 
 const TRANSCRIPTION_PROMPT = `Tu transcris un document pédagogique pour des enseignants de la Fédération Wallonie-Bruxelles.
@@ -56,15 +67,21 @@ PARTIE 1 — ANALYSE PÉDAGOGIQUE
 Avant de transcrire, résous mentalement le document :
 
 A. THÈME : Quel phonème, règle grammaticale ou notion est enseigné ?
-   Ex : "phonème -ill", "accord sujet-verbe", "vocabulaire des animaux"
+   Ex : "phonème -ill", "accord sujet-verbe", "vocabulaire des animaux de la ferme"
 
-B. RÉSOLUTION DES EXERCICES : Pour chaque exercice, liste les réponses attendues.
+B. NIVEAU DE CLASSE : Estime le niveau scolaire (CP, CE1, CE2, CM1, CM2, 6e...).
+   Indices : complexité des mots, longueur des phrases, type d'exercices.
+   Ce niveau valide les consignes — une consigne de CP ne peut pas demander de l'analyse syntaxique.
+
+C. RÉSOLUTION DE TOUS LES EXERCICES : Pour chaque exercice, liste les réponses attendues.
    Ex : Exercice 1 — bille, fille, brille, chenille, jonquille, aiguille
-   Ce n'est pas une correction : tu identifies ce que les élèves doivent écrire.
+   Exercice 2 — La fille joue. / Il brille. / ...
+   Connaître les réponses rend absurde toute erreur de lecture des consignes :
+   si les réponses sont "bille, fille, jonquille", la consigne ne peut être que liée à -ill.
 
-C. ILLUSTRATIONS ATTENDUES : En tenant compte du thème, liste les images probables.
-   Ex : "-ill" → jonquille (fleur), chenille (insecte), aiguille (couture)...
-   Ce prior sémantique te permet d'identifier les images avec beaucoup plus de certitude.
+D. ILLUSTRATIONS ATTENDUES : En tenant compte du thème ET des réponses, liste les images probables.
+   Ex : "-ill" → jonquille (fleur jaune à 6 pétales), chenille (insecte allongé), aiguille...
+   Ce prior thématique permet d'identifier les images même si elles sont peu nettes.
 
 ---TRANSCRIPTION---
 
