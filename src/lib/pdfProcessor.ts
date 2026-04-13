@@ -28,9 +28,10 @@ export interface PdfPage {
 }
 
 export interface PdfTextResult {
-  isDigital: boolean          // true = texte lisible → pas besoin de Vision
+  isDigital: boolean          // true = texte lisible → pipeline texte
   blocks: DocumentBlock[]     // blocs texte reconstruits (si isDigital)
-  pages: PdfPage[]            // images PNG (si !isDigital, pour Vision)
+  pages: PdfPage[]            // images PNG (fallback Vision legacy)
+  pdfBase64: string           // PDF brut base64 (pour rewritePdfDirect)
 }
 
 // ── Extraction texte (PDF numérique) ─────────────────────────────────────────
@@ -42,6 +43,8 @@ export interface PdfTextResult {
  */
 export async function extractPdfContent(file: File): Promise<PdfTextResult> {
   const arrayBuffer = await file.arrayBuffer()
+  // Garder le base64 brut pour l'envoi direct à l'API si besoin
+  const pdfBase64 = arrayBufferToBase64(arrayBuffer)
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
 
   let allText = ''
@@ -70,14 +73,13 @@ export async function extractPdfContent(file: File): Promise<PdfTextResult> {
 
   // Évaluer la lisibilité : ratio de caractères lisibles
   if (!isReadableText(allText)) {
-    // Scan ou PDF image → fallback Vision
-    const pages = await pdfToImages(file)
-    return { isDigital: false, blocks: [], pages }
+    // Scan ou PDF image → document natif Claude (pas de conversion canvas)
+    return { isDigital: false, blocks: [], pages: [], pdfBase64 }
   }
 
-  // PDF numérique → reconstruire les blocs
+  // PDF numérique → reconstruire les blocs depuis la couche texte
   const blocks = reconstructBlocks(rawPages)
-  return { isDigital: true, blocks, pages: [] }
+  return { isDigital: true, blocks, pages: [], pdfBase64 }
 }
 
 /**
@@ -166,6 +168,17 @@ function inferBlockType(text: string): DocumentBlock['type'] {
   // Exercice (lacunes, tirets, pointillés)
   if (/_{2,}|\.{3,}|\[.*\]/.test(t)) return 'exercise'
   return 'body'
+}
+
+// ── Utilitaire ────────────────────────────────────────────────────────────────
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
 }
 
 // ── Fallback : rendu PNG pour Vision (scan) ───────────────────────────────────

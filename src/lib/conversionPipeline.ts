@@ -5,7 +5,7 @@
 
 import type { AUProfile, ConversionReport, ConversionStep, AccessibilityResult } from '../types'
 import { parseDocx, buildPreviewHtml } from './docxProcessor'
-import { rewriteWithClaude, rewritePdfWithVision, checkAccessibility } from './claudeRewriter'
+import { rewriteWithClaude, rewritePdfWithVision, rewritePdfDirect, checkAccessibility } from './claudeRewriter'
 import { extractPdfContent } from './pdfProcessor'
 import { fetchPictosBatch } from './arasaac'
 import { buildDocx } from './docxBuilder'
@@ -54,9 +54,9 @@ export async function runConversionPipeline(
         profile.language
       )
     } else if (isPdf && pdfContent && !pdfContent.isDigital) {
-      // PDF scan → Vision (fallback uniquement)
-      rewriteResult = await rewritePdfWithVision(
-        pdfContent.pages,
+      // PDF scanné → document natif Claude (même qualité que mobile app)
+      rewriteResult = await rewritePdfDirect(
+        pdfContent.pdfBase64,
         profile.au_selections,
         profile.text_adaptation,
         profile.language
@@ -148,9 +148,7 @@ export async function runConversionPipeline(
     picto_words_found: pictoMap.size,
     picto_words_not_found: pictoWordsNotFound,
     blocks_rewritten: finalBlocks.filter(b => b.transformed !== b.original).length,
-    warnings: isPdf && pdfContent && !pdfContent.isDigital
-      ? ['PDF scanné détecté — transcription via Vision (des erreurs sont possibles sur les polices cursives)']
-      : [],
+    warnings: [],
     // Passe 2 Vision : corrections et incertitudes
     pass2_corrections: rewriteResult?.pass2_corrections ?? [],
     uncertain_chars: rewriteResult?.uncertain_chars ?? [],

@@ -2,6 +2,7 @@
   "functions": {
     "api/rewrite.ts": { "maxDuration": 60 },
     "api/pdf-vision.ts": { "maxDuration": 120 },
-    "api/accessibility-check.ts": { "maxDuration": 30 }
+    "api/accessibility-check.ts": { "maxDuration": 30 },
+    "api/pdf-direct.ts": { "maxDuration": 120 }
   }
 }

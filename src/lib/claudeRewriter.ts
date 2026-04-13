@@ -120,6 +120,31 @@ export async function rewritePdfWithVision(
 }
 
 /**
+ * PDF scanné (Microsoft Lens, photocopie...) — envoie le PDF brut à Claude
+ * comme document natif (type: "document"). Même qualité que la mobile app Claude.
+ * Un seul appel pour tout le document, pas de conversion canvas.
+ */
+export async function rewritePdfDirect(
+  pdfBase64: string,
+  activeAUs: string[],
+  textAdaptation: TextAdaptation,
+  language: string
+): Promise<RewriteResult> {
+  const response = await fetch('/api/pdf-direct', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pdfBase64, activeAUs, textAdaptation, language }),
+  })
+
+  if (!response.ok) {
+    const err = await response.text()
+    throw new Error(`Claude PDF Direct error: ${err}`)
+  }
+
+  return response.json()
+}
+
+/**
  * Passe 3 — Vérification accessibilité du document adapté
  * Appel séparé après la conversion (endpoint Haiku, ~5-10s)
  */
