@@ -1,6 +1,45 @@
 import { useApp } from '../store/AppContext'
 import { AU_CATALOG, AU_ENV_CATALOG } from '../data/auCatalog'
-import type { AccessibilityCriterion } from '../types'
+import type { AccessibilityCriterion, AccessibilityScore } from '../types'
+
+function levelColor(level: AccessibilityScore['level']) {
+  return level === 'excellent' ? { border: 'border-emerald-400', bg: 'bg-emerald-50', text: 'text-emerald-700' }
+       : level === 'bon'       ? { border: 'border-blue-400',    bg: 'bg-blue-50',    text: 'text-blue-700' }
+       : level === 'moyen'     ? { border: 'border-amber-400',   bg: 'bg-amber-50',   text: 'text-amber-700' }
+       :                         { border: 'border-red-400',     bg: 'bg-red-50',     text: 'text-red-700' }
+}
+
+function ScoreColumn({ label, score, icon }: { label: string; score: AccessibilityScore; icon: string }) {
+  const c = levelColor(score.level)
+  return (
+    <div className={`flex-1 rounded-xl border-2 ${c.border} ${c.bg} p-4`}>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-lg">{icon}</span>
+        <span className="font-semibold text-slate-700 text-sm">{label}</span>
+      </div>
+      <div className="text-4xl font-bold text-slate-800 mb-0.5">
+        {score.score}<span className="text-lg text-slate-500">/100</span>
+      </div>
+      <div className={`text-sm font-semibold capitalize mb-3 ${c.text}`}>{score.level}</div>
+      <div className="space-y-1.5">
+        {score.criteria.map((cr: AccessibilityCriterion) => (
+          <div key={cr.id} className="flex items-start gap-1.5 text-xs">
+            <span className="flex-shrink-0 mt-0.5">
+              {cr.status === 'ok' ? '✅' : cr.status === 'warning' ? '⚠️' : '❌'}
+            </span>
+            <div>
+              <span className="font-medium text-slate-700">{cr.label}</span>
+              {cr.status !== 'ok' && (
+                <span className="text-slate-500"> — {cr.detail}</span>
+              )}
+              <span className="text-slate-400 ml-1">[{cr.riss_ref}]</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export default function ReportScreen() {
   const { state, dispatch } = useApp()
@@ -33,50 +72,33 @@ export default function ReportScreen() {
           </button>
         </div>
 
-        {/* Score accessibilité — affiché en premier si disponible */}
+        {/* Score accessibilité AVANT / APRÈS */}
         {report.accessibility && (
-          <div className={`rounded-2xl p-5 border-2 ${
-            report.accessibility.level === 'excellent' ? 'border-emerald-400 bg-emerald-50' :
-            report.accessibility.level === 'bon'       ? 'border-blue-400 bg-blue-50' :
-            report.accessibility.level === 'moyen'     ? 'border-amber-400 bg-amber-50' :
-            'border-red-400 bg-red-50'
-          }`}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-slate-800 text-lg">
-                ♿ Score d'accessibilité
-              </h2>
-              <div className="text-right">
-                <div className="text-4xl font-bold text-slate-800">{report.accessibility.score}<span className="text-xl text-slate-500">/100</span></div>
-                <div className={`text-sm font-semibold capitalize mt-0.5 ${
-                  report.accessibility.level === 'excellent' ? 'text-emerald-700' :
-                  report.accessibility.level === 'bon'       ? 'text-blue-700' :
-                  report.accessibility.level === 'moyen'     ? 'text-amber-700' :
-                  'text-red-700'
-                }`}>{report.accessibility.level}</div>
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-slate-800 text-lg">♿ Score d'accessibilité</h2>
+              {/* Delta */}
+              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-bold text-sm ${
+                report.accessibility.delta >= 20 ? 'bg-emerald-100 text-emerald-700' :
+                report.accessibility.delta >= 5  ? 'bg-blue-100 text-blue-700' :
+                report.accessibility.delta >= 0  ? 'bg-amber-100 text-amber-700' :
+                'bg-red-100 text-red-700'
+              }`}>
+                <span>{report.accessibility.delta >= 0 ? '↑' : '↓'}</span>
+                <span>+{report.accessibility.delta} pts</span>
               </div>
             </div>
 
-            {/* Critères */}
-            <div className="space-y-1.5 mb-4">
-              {report.accessibility.criteria.map((c: AccessibilityCriterion) => (
-                <div key={c.id} className="flex items-start gap-2 text-sm">
-                  <span className="mt-0.5 flex-shrink-0">
-                    {c.status === 'ok' ? '✅' : c.status === 'warning' ? '⚠️' : '❌'}
-                  </span>
-                  <div>
-                    <span className="font-medium text-slate-700">{c.label}</span>
-                    {c.status !== 'ok' && (
-                      <span className="text-slate-500"> — {c.detail}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
+            {/* Colonnes AVANT / APRÈS */}
+            <div className="flex gap-3">
+              <ScoreColumn label="Avant adaptation" score={report.accessibility.before} icon="📄" />
+              <ScoreColumn label="Après adaptation" score={report.accessibility.after}  icon="✅" />
             </div>
 
             {/* Recommandations */}
             {report.accessibility.recommendations.length > 0 && (
-              <div className="border-t border-slate-200 pt-3">
-                <p className="text-xs font-semibold text-slate-600 mb-2">À corriger dans le DOCX :</p>
+              <div className="border-t border-slate-100 pt-3">
+                <p className="text-xs font-semibold text-slate-600 mb-2">À corriger manuellement dans le DOCX :</p>
                 <ul className="space-y-1">
                   {report.accessibility.recommendations.map((r, i) => (
                     <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
@@ -84,6 +106,22 @@ export default function ReportScreen() {
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+
+            {/* Références RISS du scoring */}
+            {report.accessibility.riss_refs && report.accessibility.riss_refs.length > 0 && (
+              <div className="border-t border-slate-100 pt-3">
+                <p className="text-xs font-semibold text-slate-500 mb-2">Sources RISS utilisées pour le scoring :</p>
+                <div className="space-y-2">
+                  {report.accessibility.riss_refs.map(r => (
+                    <div key={r.id} className="border-l-2 border-blue-200 pl-2">
+                      <p className="text-xs font-medium text-slate-700">{r.authors} ({r.year}) — {r.title}</p>
+                      <p className="text-xs text-slate-400 italic">"{r.key_finding}"</p>
+                      <p className="text-xs text-slate-400">Critère : {r.criterion_applied} | ID : {r.id}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
