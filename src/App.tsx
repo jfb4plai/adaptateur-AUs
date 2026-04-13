@@ -16,13 +16,15 @@ function Router() {
       if (session?.user) syncTeacher(session.user.email ?? '')
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        // Seulement à la connexion explicite — pas sur TOKEN_REFRESHED
         syncTeacher(session.user.email ?? '')
-      } else {
+      } else if (event === 'SIGNED_OUT' || !session?.user) {
         dispatch({ type: 'SET_TEACHER', teacher: null })
         dispatch({ type: 'SET_SCREEN', screen: 'login' })
       }
+      // TOKEN_REFRESHED / USER_UPDATED / etc. → pas de navigation
     })
 
     return () => subscription.unsubscribe()

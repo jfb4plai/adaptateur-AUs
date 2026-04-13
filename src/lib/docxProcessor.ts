@@ -167,7 +167,11 @@ export function buildPreviewHtml(
         : items
       html += '<ul style="list-style:none;padding-left:24px;margin:4px 0;">'
       for (const item of finalItems) {
-        html += `<li style="margin:6px 0;"><span style="color:#3B82F6;font-weight:bold;margin-right:6px;">›</span>${item}</li>`
+        // Remplacer ___ par un blanc visuel large (4 em, souligné)
+        const itemHtml = item.replace(/___/g,
+          '<span style="display:inline-block;min-width:4em;border-bottom:1.5px solid #333;margin:0 2px;">&nbsp;&nbsp;&nbsp;&nbsp;</span>'
+        )
+        html += `<li style="margin:6px 0;"><span style="color:#3B82F6;font-weight:bold;margin-right:6px;">›</span>${itemHtml}</li>`
       }
       html += '</ul>'
     } else if (block.type === 'title') {

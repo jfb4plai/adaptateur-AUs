@@ -217,6 +217,8 @@ export default function ConvertScreen() {
   // Phase 1 result → stocké pour correction
   const [phase1Result, setPhase1Result] = useState<Phase1Result | null>(null)
   const [editableBlocks, setEditableBlocks] = useState<RewrittenBlock[]>([])
+  // Copie locale du previewHtml — contourne les éventuels stale states React
+  const [localPreviewHtml, setLocalPreviewHtml] = useState<string | null>(null)
 
   const profiles = state.profiles
   const selectedProfile = state.selectedProfile
@@ -251,6 +253,7 @@ export default function ConvertScreen() {
     setPhase('idle')
     setPhase1Result(null)
     setEditableBlocks([])
+    setLocalPreviewHtml(null)
     setError('')
     dispatch({ type: 'RESET_CONVERSION' })
   }
@@ -300,6 +303,7 @@ export default function ConvertScreen() {
         report: result.report,
         filename: file!.name,
       })
+      setLocalPreviewHtml(result.previewHtml)  // copie locale anti-stale
       setPhase('done')
     } catch (e: any) {
       setError(e.message ?? 'Erreur inconnue')
@@ -464,12 +468,14 @@ export default function ConvertScreen() {
               >
                 ↓ Télécharger le DOCX
               </button>
-              <button
-                onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'report' })}
-                className="border border-slate-300 text-slate-600 px-5 py-2 rounded-lg text-sm hover:bg-slate-50 transition"
-              >
-                📊 Voir le rapport
-              </button>
+              {state.report && (
+                <button
+                  onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'report' })}
+                  className="border border-slate-300 text-slate-600 px-5 py-2 rounded-lg text-sm hover:bg-slate-50 transition"
+                >
+                  📊 Voir le rapport
+                </button>
+              )}
               <button
                 onClick={reset}
                 className="border border-slate-300 text-slate-600 px-5 py-2 rounded-lg text-sm hover:bg-slate-50 transition"
@@ -484,7 +490,7 @@ export default function ConvertScreen() {
               <div
                 className="border border-slate-200 rounded-xl p-4 max-h-96 overflow-y-auto text-sm text-slate-700 bg-white"
                 style={{ fontFamily: 'Arial, sans-serif', lineHeight: '1.6' }}
-                dangerouslySetInnerHTML={{ __html: state.previewHtml ?? '' }}
+                dangerouslySetInnerHTML={{ __html: localPreviewHtml ?? state.previewHtml ?? '' }}
               />
             </div>
           </div>

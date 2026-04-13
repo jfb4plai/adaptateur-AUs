@@ -22,6 +22,27 @@ async function fetchImageAsBuffer(url: string): Promise<ArrayBuffer | null> {
   }
 }
 
+/**
+ * Convertit un texte avec ___ en runs DOCX avec blancs larges.
+ * 20 underscores ≈ 4 cm en Arial 12pt — suffisant pour l'écriture cursive P2/P3.
+ */
+function textToRunsWithBlanks(
+  text: string,
+  font?: string,
+  size?: number,
+  bold?: boolean
+): TextRun[] {
+  const BLANK = '____________________'   // 20 underscores
+  const parts = text.split('___')
+  if (parts.length === 1) return [new TextRun({ text, font, size, bold })]
+  return parts.flatMap((part, i) => {
+    const runs: TextRun[] = []
+    if (part) runs.push(new TextRun({ text: part, font, size, bold }))
+    if (i < parts.length - 1) runs.push(new TextRun({ text: BLANK, font, size }))
+    return runs
+  })
+}
+
 /** Extrait le mot d'un marqueur [IMG: mot], retourne null si absent */
 function extractImgWord(text: string): string | null {
   const m = text.match(/^\[IMG:\s*([^\]]+)\]/)
@@ -116,7 +137,7 @@ export async function buildDocx(
           runs.push(new TextRun({ text, font: defaultFont, size: defaultSize }))
         }
       } else {
-        runs.push(new TextRun({ text, font: defaultFont, size: defaultSize }))
+        runs.push(...textToRunsWithBlanks(text, defaultFont, defaultSize))
       }
       if (picto_options.audio.enabled) {
         runs.push(new TextRun({ text: ' [audio]', font: defaultFont, size: defaultSize }))
@@ -170,7 +191,7 @@ export async function buildDocx(
           }
         }
 
-        runs.push(new TextRun({ text: itemText, font: defaultFont, size: defaultSize }))
+        runs.push(...textToRunsWithBlanks(itemText, defaultFont, defaultSize))
 
         children.push(new Paragraph({
           alignment,
