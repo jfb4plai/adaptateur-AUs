@@ -55,31 +55,50 @@ PROFIL D'ADAPTATION : ${textAdaptation}
 AMÉNAGEMENTS UNIVERSELS ACTIFS : ${activeAUs.join(', ')}
 
 ════════════════════════════════════════════════
-RÈGLES DE CONVERSION MARKDOWN → JSON
+ÉTAPE 1 — VALIDATION DU VOCABULAIRE (OBLIGATOIRE)
 ════════════════════════════════════════════════
 
-STRUCTURE :
-• # Titre → bloc type "title"
-• ## Exercice N — Consigne → bloc type "instruction" avec exercise_number = N
-• • Items sous une instruction → bloc type "exercise" avec exercise_items[]
-• » Liste de mots → bloc type "body"
-• Texte courant → bloc type "body"
+Avant toute conversion, vérifie chaque mot du texte transcrit :
+• Si un mot n'existe pas en français mais qu'une correction évidente existe
+  (ex : "éable" → "étable", "tabe" → "table"), corrige-le dans "original"
+  ET note la correction dans "original" comme : mot_corrigé [CORR: mot_original]
+  Ex : "Dans l'étable [CORR: éable], il y a des bœufs"
+• Si un mot est ambigu et la correction n'est pas certaine → laisser avec [?]
+• Mots techniques, noms propres, régionalismes belges → ne pas "corriger"
+
+════════════════════════════════════════════════
+ÉTAPE 2 — CONVERSION MARKDOWN → JSON
+════════════════════════════════════════════════
+
+STRUCTURE — ORDRE ABSOLU À RESPECTER :
+Pour chaque ## Exercice N, créer ces blocs DANS CET ORDRE EXACT :
+  1. bloc type "instruction", exercise_number = N  ← TOUJOURS EN PREMIER
+  2. bloc type "exercise", exercise_number = N     ← TOUJOURS APRÈS l'instruction
+
+JAMAIS : items d'exercice avant leur consigne.
+JAMAIS : consigne après les items.
+JAMAIS : mélanger les items d'exercices différents.
+
+Types de blocs :
+• # Titre → "title"
+• ## Exercice N — Consigne → "instruction" (exercise_number = N)
+• • Items sous une ## → "exercise" (exercise_number = N, exercise_items = [...])
+• » Liste de mots → "body"
+• Texte courant → "body"
 
 ILLUSTRATIONS [IMG: mot] :
 • Conserver [IMG: mot] dans exercise_items[] à sa position exacte
-• Collecter tous les mots d'illustration uniques dans "illustration_words" (racine du JSON)
-• Ex : "[IMG: bœuf] un b___f" → item avec [IMG: bœuf] intégré
+• Collecter tous les mots uniques dans "illustration_words" (racine JSON)
 
 BLANCS ___ :
 • Conserver exactement ___ dans "original" ET "transformed"
 • Ne jamais compléter les blancs
 
-CHAMPS DU JSON :
-• "original" = texte exact de la transcription (ne rien modifier)
-• "transformed" = texte adapté selon les AUs actifs
-  → Si aucun AU ne s'applique : transformed = original
-• "exercise_items" = tableau des items (un item = une ligne •)
-• "exercise_number" = numéro de l'exercice (1, 2, 3...) ou null
+CHAMPS :
+• "original" = texte de la transcription (corrigé si mot inexistant, cf. Étape 1)
+• "transformed" = texte adapté selon les AUs (= original si aucun AU applicable)
+• "exercise_items" = tableau des items • (obligatoire si type = "exercise")
+• "exercise_number" = numéro 1, 2, 3... (obligatoire si instruction ou exercise)
 
 ════════════════════════════════════════════════
 ADAPTATIONS PAR AU ACTIF (champ "transformed")

@@ -79,11 +79,11 @@ export async function buildDocx(
       if (lastExerciseNumber > 0) {
         children.push(new Paragraph({ spacing: { before: 480, after: 0 }, children: [] }))
       }
-      // Bandeau "━━━ Exercice N ━━━━━━━━━━━━━━━━"
-      const dashes = '━'.repeat(20)
+      // Bandeau "Exercice N" — texte court centré dans un encadré bleu
       children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
         spacing: { before: 80, after: 160 },
-        shading: { fill: 'EFF6FF' },   // fond bleu très clair
+        shading: { fill: 'EFF6FF' },
         border: {
           top:    { style: BorderStyle.SINGLE, size: 8, color: '3B82F6', space: 4 },
           bottom: { style: BorderStyle.SINGLE, size: 8, color: '3B82F6', space: 4 },
@@ -92,10 +92,10 @@ export async function buildDocx(
         },
         children: [
           new TextRun({
-            text: `${dashes}  Exercice ${block.exercise_number}  ${dashes}`,
+            text: `Exercice ${block.exercise_number}`,
             bold: true,
             color: '1D4ED8',
-            size: (defaultSize ?? 24) + 2,
+            size: (defaultSize ?? 24) + 4,
             font: defaultFont ?? 'Arial',
           }),
         ],

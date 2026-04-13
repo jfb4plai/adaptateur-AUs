@@ -118,8 +118,9 @@ export async function runConversionPipeline(
     picto_words: [],
   }))
 
-  // ── Étape 4 : Réordonnancement ────────────────────────────────────────────
-  if (rewriteResult?.structure_hints.reorder_instructions_first) {
+  // ── Étape 4 : Réordonnancement (DOCX uniquement) ─────────────────────────
+  // Désactivé pour PDF : l'ordre instruction→items doit être celui du document
+  if (!isPdf && rewriteResult?.structure_hints.reorder_instructions_first) {
     finalBlocks.sort((a, b) =>
       a.type === 'instruction' && b.type !== 'instruction' ? -1 :
       b.type === 'instruction' && a.type !== 'instruction' ? 1 : 0
