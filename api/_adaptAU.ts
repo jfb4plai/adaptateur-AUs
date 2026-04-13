@@ -85,6 +85,7 @@ Types de blocs :
 • • Items sous une ## → "exercise" (exercise_number = N, exercise_items = [...])
 • » Liste de mots → "body"
 • Texte courant → "body"
+• --- SAUT DE PAGE --- → "pagebreak" (original: "", transformed: "")
 
 ILLUSTRATIONS [IMG: mot] :
 • Conserver [IMG: mot] dans exercise_items[] à sa position exacte

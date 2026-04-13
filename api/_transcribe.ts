@@ -82,7 +82,13 @@ RÈGLES DE FORMAT (obligatoires)
 7. CHOIX MULTIPLES
    Conserver la forme exacte : (mot1 / mot2)
 
-8. SÉPARATION ENTRE EXERCICES
+8. SAUTS DE PAGE
+   Chaque changement de page du document → ligne seule obligatoire :
+   --- SAUT DE PAGE ---
+   Un changement de page = souvent un changement de thème pédagogique.
+   Ne jamais fusionner deux pages en une.
+
+9. SÉPARATION ENTRE EXERCICES
    Ligne vide avant chaque ## Exercice
 
 ════════════════════════════════════

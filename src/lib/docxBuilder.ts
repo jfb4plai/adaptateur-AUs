@@ -6,7 +6,7 @@
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   AlignmentType, Footer, BorderStyle,
-  ImageRun,
+  ImageRun, PageBreak,
 } from 'docx'
 import type { RewrittenBlock } from './claudeRewriter'
 import type { AUProfile } from '../types'
@@ -179,6 +179,10 @@ export async function buildDocx(
           children: runs,
         }))
       }
+
+    // ── Saut de page ──────────────────────────────────────────────────────
+    } else if (block.type === 'pagebreak') {
+      children.push(new Paragraph({ children: [new PageBreak()] }))
 
     // ── Titre ─────────────────────────────────────────────────────────────
     } else if (block.type === 'title') {
