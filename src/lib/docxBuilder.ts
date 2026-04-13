@@ -41,26 +41,30 @@ export async function buildDocx(
   for (const block of blocks) {
     const text = block.transformed || block.original
 
-    // Construire les runs de texte
+    // Le texte peut contenir des \n (exercices en colonnes) → on crée un paragraphe par ligne
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+    const firstLine = lines[0] ?? ''
+    const extraLines = lines.slice(1)
+
+    // ── Construire les runs pour la première ligne ────────────────────────
     const runs: TextRun[] = []
 
     if (block.type === 'instruction' && au_selections.includes('AU12') && block.action_verb) {
       // Verbe en gras, reste normal
-      const verbIdx = text.toLowerCase().indexOf(block.action_verb.toLowerCase())
+      const verbIdx = firstLine.toLowerCase().indexOf(block.action_verb.toLowerCase())
       if (verbIdx >= 0) {
-        if (verbIdx > 0) runs.push(new TextRun({ text: text.slice(0, verbIdx), font: defaultFont, size: defaultSize }))
-        runs.push(new TextRun({ text: text.slice(verbIdx, verbIdx + block.action_verb.length), bold: true, font: defaultFont, size: defaultSize }))
-        runs.push(new TextRun({ text: text.slice(verbIdx + block.action_verb.length), font: defaultFont, size: defaultSize }))
+        if (verbIdx > 0) runs.push(new TextRun({ text: firstLine.slice(0, verbIdx), font: defaultFont, size: defaultSize }))
+        runs.push(new TextRun({ text: firstLine.slice(verbIdx, verbIdx + block.action_verb.length), bold: true, font: defaultFont, size: defaultSize }))
+        runs.push(new TextRun({ text: firstLine.slice(verbIdx + block.action_verb.length), font: defaultFont, size: defaultSize }))
       } else {
-        runs.push(new TextRun({ text, font: defaultFont, size: defaultSize }))
+        runs.push(new TextRun({ text: firstLine, font: defaultFont, size: defaultSize }))
       }
     } else {
-      runs.push(new TextRun({ text, font: defaultFont, size: defaultSize }))
+      runs.push(new TextRun({ text: firstLine, font: defaultFont, size: defaultSize }))
     }
 
-    // Audio marker
     if (picto_options.audio.enabled) {
-      runs.push(new TextRun({ text: ' 🔊', font: defaultFont, size: defaultSize }))
+      runs.push(new TextRun({ text: ' [audio]', font: defaultFont, size: defaultSize }))
     }
 
     const para = new Paragraph({
@@ -70,6 +74,15 @@ export async function buildDocx(
       children: runs,
     })
     children.push(para)
+
+    // ── Lignes supplémentaires (items d'exercice) ─────────────────────────
+    for (const line of extraLines) {
+      children.push(new Paragraph({
+        alignment,
+        spacing: lineSpacing,
+        children: [new TextRun({ text: line, font: defaultFont, size: defaultSize })],
+      }))
+    }
 
     // Objectif (AU15)
     if (au_selections.includes('AU15') && block.objective_sentence) {
@@ -92,11 +105,10 @@ export async function buildDocx(
       }
     }
 
-    // Étapes (AU19)
+    // Étapes (AU19) — numérotation dans le texte (pas de référence numbering externe)
     if (au_selections.includes('AU19') && block.steps?.length) {
       block.steps.forEach((step, i) => {
         children.push(new Paragraph({
-          numbering: { reference: 'numbered-steps', level: 0 },
           alignment,
           spacing: lineSpacing,
           children: [new TextRun({ text: `${i + 1}. ${step}`, font: defaultFont, size: defaultSize })],
