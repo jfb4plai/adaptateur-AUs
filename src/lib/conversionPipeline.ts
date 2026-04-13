@@ -5,17 +5,18 @@
  * DOCX → Parse texte → Adaptation AU → Arasaac → DOCX
  */
 
-import type { AUProfile, ConversionReport, ConversionStep, AccessibilityResult } from '../types'
+import type { AUProfile, ConversionReport, ConversionStep } from '../types'
 import { parseDocx, buildPreviewHtml } from './docxProcessor'
 import {
   rewriteWithClaude,
   transcribePdf,
   adaptWithAUs,
-  checkAccessibility,
 } from './claudeRewriter'
 import type { RewrittenBlock } from './claudeRewriter'
 import { fetchPictosBatch } from './arasaac'
 import { buildDocx } from './docxBuilder'
+import { computeAccessibilityScore } from './accessibilityScore'
+import { AU_CATALOG } from '../data/auCatalog'
 
 /** Lit un File en base64 */
 async function fileToBase64(file: File): Promise<string> {
@@ -154,15 +155,15 @@ export async function runPhase2(
   const docxBlob = await buildDocx(finalBlocks, profile, pictoMap, illustrationPictoMap, filename)
   onStep('build', 'done')
 
-  let accessibility: AccessibilityResult | undefined
-  try {
-    onStep('accessibility', 'running')
-    accessibility = await checkAccessibility(finalBlocks, profile.text_adaptation, profile.au_selections, profile.language)
-    onStep('accessibility', 'done')
-  } catch (e) {
-    console.warn('[accessibility check failed]', e)
-    onStep('accessibility', 'error')
-  }
+  // Score d'accessibilité déterministe — pas d'appel API, résultat immédiat
+  onStep('accessibility', 'running')
+  const accessibility = computeAccessibilityScore(
+    profile.au_selections,
+    finalBlocks.filter(b => b.transformed !== b.original).length,
+    pictoMap.size,
+    AU_CATALOG
+  )
+  onStep('accessibility', 'done')
 
   const report: ConversionReport = {
     aus_applied: profile.au_selections.filter(id => !id.startsWith('AU-ENV')),
@@ -173,7 +174,7 @@ export async function runPhase2(
     warnings: [],
     illustration_words_found: illustrationPictoMap.size,
     illustration_words_not_found: illustrationWordsNotFound,
-    accessibility,
+    accessibility: accessibility,
   }
 
   return { previewHtml, docxBlob, report }

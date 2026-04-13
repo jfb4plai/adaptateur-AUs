@@ -131,7 +131,7 @@ export function buildPreviewHtml(
   let html = '<div class="au-preview" style="font-family:Arial,sans-serif;max-width:700px;">'
 
   for (const block of normalized) {
-    let content = block.transformed
+    let content = (block.transformed ?? '').replace(/\s*\[CORR:\s*[^\]]+\]/g, '')
 
     // Injecter les pictos dans le texte
     if (profile.au_selections.includes('AU16') && pictoMap.size > 0) {

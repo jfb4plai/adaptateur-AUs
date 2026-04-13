@@ -23,6 +23,14 @@ async function fetchImageAsBuffer(url: string): Promise<ArrayBuffer | null> {
 }
 
 /**
+ * Retire les marqueurs de correction [CORR: mot_original] du texte final.
+ * Si l'utilisateur n'a pas corrigé dans le tableau, c'est que la correction est bonne.
+ */
+function stripCorrMarkers(text: string): string {
+  return text.replace(/\s*\[CORR:\s*[^\]]+\]/g, '')
+}
+
+/**
  * Convertit un texte avec ___ en runs DOCX avec blancs larges.
  * 20 underscores ≈ 4 cm en Arial 12pt — suffisant pour l'écriture cursive P2/P3.
  */
@@ -91,7 +99,7 @@ export async function buildDocx(
   let lastExerciseNumber = 0
 
   for (const block of normalizedBlocks) {
-    const text = block.transformed || block.original
+    const text = stripCorrMarkers(block.transformed || block.original)
 
     // ── Séparateur visuel + numéro avant chaque exercice ─────────────────
     if (block.exercise_number && block.exercise_number !== lastExerciseNumber
@@ -156,7 +164,7 @@ export async function buildDocx(
       const raw: string[] = block.exercise_items?.length
         ? block.exercise_items
         : text.split('\n')
-      const items = raw.map((l: string) => l.trim()).filter((l: string) => l.length > 0)
+      const items = raw.map((l: string) => stripCorrMarkers(l.trim())).filter((l: string) => l.length > 0)
 
       // Si un seul item sans \n = Claude a tout mis en ligne → on tente split sur |
       const finalItems = (items.length === 1 && items[0].includes('|'))
