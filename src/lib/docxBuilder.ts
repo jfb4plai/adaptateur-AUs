@@ -163,9 +163,6 @@ export async function buildDocx(
       }
     }
 
-    // firstLine : uniquement pour les blocs AU qui annotent la consigne principale
-    const firstLine = text.split('\n')[0] ?? text
-
     // Objectif (AU15)
     if (au_selections.includes('AU15') && block.objective_sentence) {
       children.push(new Paragraph({

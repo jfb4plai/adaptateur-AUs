@@ -83,6 +83,8 @@ export async function runConversionPipeline(
     type: b.type,
     original: b.text,
     transformed: b.text,
+    exercise_number: null,
+    exercise_items: null,
     action_verb: null,
     bullet_items: null,
     objective_sentence: null,

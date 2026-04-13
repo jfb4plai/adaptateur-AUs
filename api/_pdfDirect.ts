@@ -31,7 +31,7 @@ export async function handlePdfDirect(body: PdfDirectRequest): Promise<string> {
 
   const result = await client.messages.create({
     model: MODEL,
-    max_tokens: 8096,
+    max_tokens: 16000,   // augmenté : documents multi-exercices avec nombreux items
     system: buildPrompt(activeAUs, textAdaptation, language),
     messages: [
       {
@@ -47,7 +47,14 @@ export async function handlePdfDirect(body: PdfDirectRequest): Promise<string> {
           } as any, // eslint-disable-line @typescript-eslint/no-explicit-any
           {
             type: 'text',
-            text: 'Analyse ce document pédagogique et retourne le JSON demandé.',
+            text: `Analyse ce document pédagogique.
+
+AVANT de générer le JSON :
+1. Compte le nombre total d'items dans CHAQUE exercice (mots à compléter, phrases, etc.)
+2. Vérifie que ton exercise_items[] contient exactement ce nombre d'items
+3. Si les items sont sur une même ligne séparés par des espaces ou | → les éclater un par un
+
+Retourne le JSON demandé avec TOUS les items sans exception.`,
           },
         ],
       },
