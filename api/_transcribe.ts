@@ -67,10 +67,11 @@ RÈGLES DE FORMAT (obligatoires)
    Ex : "un b___f"  (b et f imprimés, blanc entre = ___)
 
 5. ILLUSTRATIONS (dessins, pictogrammes, images)
-   [IMG: mot_précis_en_1_mot]
-   → placé sur sa propre ligne, juste avant l'item associé
-   → choisir le mot le plus précis possible (ex: bœuf, pneu, cœur, dé)
-   → si l'image est trop floue pour être identifiée : [IMG: ?]
+   RÈGLE ABSOLUE : ne décrire une illustration QUE si tu es certain à 100%.
+   → Certitude totale sur l'objet représenté → [IMG: mot_précis]
+   → Moindre doute, image floue, interprétation possible → NE RIEN ÉCRIRE
+   Une mauvaise identification est plus nuisible qu'une absence.
+   Ne jamais écrire [IMG: ?] — silence vaut mieux qu'erreur.
 
 6. LISTES DE MOTS
    Conserver sur lignes séparées précédées de »
