@@ -144,10 +144,21 @@ export async function runConversionPipeline(
   }
 
   // Illustrations [IMG: mot] — toujours cherchées, indépendamment de AU16
+  // Source 1 : illustration_words déclarés par le modèle (racine JSON)
+  // Source 2 : champ illustrations[] par bloc (si populé)
+  // Source 3 : extraction déterministe depuis exercise_items (fallback si le modèle oublie)
+  const imgTagPattern = /\[IMG:\s*([^\]]+)\]/g
+  const extractedFromItems = finalBlocks.flatMap(b =>
+    (b.exercise_items ?? []).flatMap(item => {
+      const matches = [...item.matchAll(imgTagPattern)]
+      return matches.map(m => m[1].trim().toLowerCase())
+    })
+  )
   const allIllustrationWords = [
     ...new Set([
       ...(rewriteResult?.illustration_words ?? []),
       ...finalBlocks.flatMap(b => b.illustrations ?? []),
+      ...extractedFromItems,
     ])
   ]
   if (allIllustrationWords.length > 0) {
