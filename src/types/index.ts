@@ -8,6 +8,7 @@ export interface RissRef {
   authors: string
   year: number
   key_finding: string
+  criterion_applied?: string   // présent dans les refs du score d'accessibilité
 }
 
 export interface AU {
@@ -115,15 +116,23 @@ export type ConversionStatus = 'pending' | 'processing' | 'done' | 'error'
 export interface AccessibilityCriterion {
   id: string
   label: string
+  riss_ref: string
   status: 'ok' | 'warning' | 'fail'
   detail: string
 }
 
-export interface AccessibilityResult {
+export interface AccessibilityScore {
   score: number
   level: 'excellent' | 'bon' | 'moyen' | 'insuffisant'
   criteria: AccessibilityCriterion[]
+}
+
+export interface AccessibilityResult {
+  before: AccessibilityScore
+  after: AccessibilityScore
+  delta: number
   recommendations: string[]
+  riss_refs: RissRef[]
 }
 
 export interface ConversionReport {
