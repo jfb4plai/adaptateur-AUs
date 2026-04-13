@@ -5,8 +5,16 @@
 
 import type { AUProfile, ConversionReport, ConversionStep, AccessibilityResult } from '../types'
 import { parseDocx, buildPreviewHtml } from './docxProcessor'
-import { rewriteWithClaude, rewritePdfWithVision, rewritePdfDirect, checkAccessibility } from './claudeRewriter'
-import { extractPdfContent } from './pdfProcessor'
+import { rewriteWithClaude, rewritePdfDirect, checkAccessibility } from './claudeRewriter'
+
+/** Lit un File en base64 (sans préfixe data:...) */
+async function fileToBase64(file: File): Promise<string> {
+  const buf = await file.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary)
+}
 import { fetchPictosBatch } from './arasaac'
 import { buildDocx } from './docxBuilder'
 
@@ -28,15 +36,15 @@ export async function runConversionPipeline(
   // ── Étape 1 : Parse ──────────────────────────────────────────────────────
   onStep('parse', 'running')
   const parsed = isPdf ? null : await parseDocx(file)
-  // PDF : tente extraction texte d'abord, fallback images si scan
-  const pdfContent = isPdf ? await extractPdfContent(file) : null
+  // PDF : lire en base64 pour envoi natif — pas d'extraction texte (OCR garbled)
+  const pdfBase64 = isPdf ? await fileToBase64(file) : null
   onStep('parse', 'done')
 
   // ── Étape 2 : Direct AUs ─────────────────────────────────────────────────
   onStep('direct', 'running')
   onStep('direct', 'done')
 
-  // ── Étape 3 : Claude texte (DOCX ou PDF numérique) ou Vision (scan) ───────
+  // ── Étape 3 : Claude document natif (PDF) ou texte (DOCX) ────────────────
   const needsClaude = profile.au_selections.some(id =>
     ['AU11','AU12','AU13','AU14','AU15','AU18','AU19','AU20','AU21','AU22','AU23','AU24','AU26'].includes(id)
   )
@@ -45,18 +53,11 @@ export async function runConversionPipeline(
 
   onStep('claude', 'running')
   try {
-    if (isPdf && pdfContent?.isDigital) {
-      // PDF numérique → même pipeline que DOCX (texte extrait proprement)
-      rewriteResult = await rewriteWithClaude(
-        pdfContent.blocks,
-        profile.au_selections,
-        profile.text_adaptation,
-        profile.language
-      )
-    } else if (isPdf && pdfContent && !pdfContent.isDigital) {
-      // PDF scanné → document natif Claude (même qualité que mobile app)
+    if (isPdf && pdfBase64) {
+      // Tout PDF → document natif Claude (scan OU numérique)
+      // L'API document lit le contenu directement, sans extraction intermédiaire
       rewriteResult = await rewritePdfDirect(
-        pdfContent.pdfBase64,
+        pdfBase64,
         profile.au_selections,
         profile.text_adaptation,
         profile.language
